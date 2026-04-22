@@ -389,7 +389,7 @@ export default function Home() {
         className="relative z-10 min-h-screen w-full scroll-mt-28 bg-transparent"
         aria-label="Home"
       >
-        <div className="pointer-events-none absolute inset-0 flex min-h-screen items-start justify-end px-5 pt-[clamp(6.25rem,16vh,11.5rem)] pr-[max(1rem,5vw)] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)]">
+        <div className="pointer-events-none absolute inset-0 flex min-h-screen items-start justify-end px-5 pt-40 pr-[max(1rem,5vw)] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)]">
           <div className="flex flex-col items-end">
             <Image
               src={HOME_HERO_LOGO}
