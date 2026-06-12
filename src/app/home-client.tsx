@@ -499,7 +499,7 @@ export default function HomeClient({ content }: HomeClientProps) {
             />
           </motion.div>
 
-          <div className={`mt-4 flex w-full flex-col items-end md:mt-5 ${heroTaglineWidthClass}`}>
+          <div className={`-translate-y-1 mt-1.5 flex w-full flex-col items-end md:mt-5 md:translate-y-0 ${heroTaglineWidthClass}`}>
             <motion.div
               aria-label="Skyrocket. Engineered to grow your views."
               initial={false}
@@ -515,10 +515,10 @@ export default function HomeClient({ content }: HomeClientProps) {
                 delay: !navReducedMotion && heroOverlayVisible ? 0.06 : 0,
               }}
               style={{ transformOrigin: "top right" }}
-              className="text-[clamp(1.2rem,3.6vw,1.85rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
+              className="text-[clamp(0.8125rem,2.8vw,0.975rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
             >
               <motion.span
-                className="inline-flex min-h-[1.35em] w-full flex-nowrap items-center justify-end gap-x-1.5 whitespace-nowrap text-right md:min-h-[1.3em]"
+                className="inline-flex min-h-[1.2em] w-full flex-nowrap items-center justify-end gap-x-1 whitespace-nowrap text-right md:min-h-[1.3em] md:gap-x-1.5"
                 variants={heroTaglineVariants}
                 initial="hidden"
                 animate="visible"
@@ -527,7 +527,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                 <TextLoop
                   interval={420}
                   stableSlot
-                  className="w-[11ch] text-center font-bold leading-none tracking-[-0.04em] text-[clamp(1.28rem,3.85vw,1.95rem)] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
+                  className="min-h-[1.2em] w-[9ch] text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
                 >
                   {content.hero.rotatingWords.map((word) => (
                     <span key={word}>{word}</span>

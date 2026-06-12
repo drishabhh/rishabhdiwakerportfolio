@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant tall (@media (min-height: 845px));
+
 :root {
   color-scheme: dark;
   /*
