@@ -39,7 +39,7 @@ export type TextLoopProps = {
   className?: string;
   /** Fixed-height slot so word swaps do not shift surrounding layout. */
   stableSlot?: boolean;
-  /** Cycle display fonts each step (off by default when stableSlot is on). */
+  /** Cycle display fonts each step (on by default). */
   rotateFonts?: boolean;
 };
 
@@ -56,7 +56,7 @@ export function TextLoop({
   const items = Children.toArray(children).filter(Boolean);
   const [stepIndex, setStepIndex] = useState(0);
   const prefersReducedMotion = useReducedMotion();
-  const useRotatingFonts = rotateFonts ?? !stableSlot;
+  const useRotatingFonts = rotateFonts ?? true;
 
   useEffect(() => {
     if (prefersReducedMotion || items.length === 0) return;
@@ -115,7 +115,7 @@ export function TextLoop({
 
   if (stableSlot) {
     return (
-      <span className={`relative inline-block shrink-0 align-middle leading-none ${className}`}>
+      <span className={`relative inline-block min-h-[1.45em] shrink-0 align-middle leading-none ${className}`}>
         <span aria-hidden className="invisible whitespace-nowrap leading-none">
           {longestChildText(items)}
         </span>

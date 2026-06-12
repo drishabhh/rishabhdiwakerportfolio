@@ -527,7 +527,6 @@ export default function HomeClient({ content }: HomeClientProps) {
                 <TextLoop
                   interval={420}
                   stableSlot
-                  rotateFonts={false}
                   className="w-[11ch] text-center font-bold leading-none tracking-[-0.04em] text-[clamp(1.28rem,3.85vw,1.95rem)] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
                 >
                   {content.hero.rotatingWords.map((word) => (
