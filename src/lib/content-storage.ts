@@ -4,7 +4,11 @@ const CONTENT_BLOB_PATH = "portfolio/content.json";
 const FAVICON_BLOB_PREFIX = "portfolio/favicon";
 
 export function hasBlobStorage(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN ||
+      process.env.BLOB_STORE_ID ||
+      (process.env.VERCEL === "1" && process.env.VERCEL_OIDC_TOKEN),
+  );
 }
 
 export async function readBlobText(pathname: string): Promise<string | null> {

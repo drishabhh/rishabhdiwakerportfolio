@@ -2,6 +2,8 @@ import HomeClient from "@/app/home-client";
 import { readContent } from "@/lib/content";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
   return {

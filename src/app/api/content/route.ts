@@ -1,6 +1,6 @@
 import { isAdminAuthenticated } from "@/lib/auth";
 import { mergeContent, readContent, writeContent, type SiteContent } from "@/lib/content";
-import { hasBlobStorage } from "@/lib/content-storage";
+import { storageSetupHint } from "@/lib/github-content";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -19,17 +19,13 @@ export async function PUT(request: Request) {
     await writeContent(content);
     return NextResponse.json(content);
   } catch (error) {
-    if (error instanceof Error && error.message === "FILE_STORAGE_UNAVAILABLE") {
+    if (error instanceof Error && error.message === "STORAGE_UNAVAILABLE") {
       return NextResponse.json(
-        {
-          error: hasBlobStorage()
-            ? "Could not save content."
-            : "Saving requires Vercel Blob storage. In your Vercel project go to Storage → Create Blob store → connect it to this project, then redeploy.",
-          code: "STORAGE_UNAVAILABLE",
-        },
+        { error: storageSetupHint(), code: "STORAGE_UNAVAILABLE" },
         { status: 503 },
       );
     }
-    return NextResponse.json({ error: "Invalid content" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Invalid content";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

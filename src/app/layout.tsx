@@ -45,6 +45,8 @@ const dotGothic16 = DotGothic16({
   weight: "400",
 });
 
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
   return {

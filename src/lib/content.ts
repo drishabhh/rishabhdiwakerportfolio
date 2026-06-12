@@ -6,6 +6,12 @@ import {
   readBlobText,
   writeBlobText,
 } from "./content-storage";
+import {
+  GITHUB_CONTENT_PATH,
+  hasGitHubStorage,
+  readGitHubText,
+  writeGitHubText,
+} from "./github-content";
 
 export type HighlightItem = {
   title: string;
@@ -305,7 +311,18 @@ export async function readContent(): Promise<SiteContent> {
       try {
         return mergeContent(JSON.parse(blobRaw) as Partial<SiteContent>);
       } catch {
-        /* fall through to file/default */
+        /* fall through */
+      }
+    }
+  }
+
+  if (hasGitHubStorage()) {
+    const githubRaw = await readGitHubText(GITHUB_CONTENT_PATH);
+    if (githubRaw) {
+      try {
+        return mergeContent(JSON.parse(githubRaw) as Partial<SiteContent>);
+      } catch {
+        /* fall through */
       }
     }
   }
@@ -322,7 +339,16 @@ export async function writeContent(content: SiteContent): Promise<void> {
   const json = JSON.stringify(content, null, 2);
 
   if (hasBlobStorage()) {
-    await writeBlobText(CONTENT_BLOB_PATH, json, "application/json");
+    try {
+      await writeBlobText(CONTENT_BLOB_PATH, json, "application/json");
+      return;
+    } catch {
+      /* try next backend */
+    }
+  }
+
+  if (hasGitHubStorage()) {
+    await writeGitHubText(GITHUB_CONTENT_PATH, json, "Update site content from admin dashboard");
     return;
   }
 
@@ -330,7 +356,7 @@ export async function writeContent(content: SiteContent): Promise<void> {
     await mkdir(path.dirname(contentPath), { recursive: true });
     await writeFile(contentPath, json, "utf-8");
   } catch {
-    throw new Error("FILE_STORAGE_UNAVAILABLE");
+    throw new Error("STORAGE_UNAVAILABLE");
   }
 }
 
