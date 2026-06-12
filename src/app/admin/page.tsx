@@ -154,7 +154,12 @@ export default function AdminPage() {
       setMessage("Saved! Changes appear on the site within a few seconds.");
       setTimeout(() => setMessage(""), 4000);
     } else {
-      setMessage("Save failed. Make sure you're still logged in.");
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status === 401) {
+        setMessage("Session expired. Please log out and sign in again.");
+      } else {
+        setMessage(data.error || "Save failed. Please try again.");
+      }
     }
   };
 
@@ -285,7 +290,13 @@ export default function AdminPage() {
       </header>
 
       {message ? (
-        <div className="border-b border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300 sm:px-6">
+        <div
+          className={`border-b px-4 py-3 text-sm sm:px-6 ${
+            message.startsWith("Saved") || message.includes("Tab icon saved")
+              ? "border-emerald-900/50 bg-emerald-950/40 text-emerald-300"
+              : "border-red-900/50 bg-red-950/40 text-red-300"
+          }`}
+        >
           {message}
         </div>
       ) : null}

@@ -1,5 +1,11 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import path from "path";
+import {
+  CONTENT_BLOB_PATH,
+  hasBlobStorage,
+  readBlobText,
+  writeBlobText,
+} from "./content-storage";
 
 export type HighlightItem = {
   title: string;
@@ -293,6 +299,17 @@ export const defaultContent: SiteContent = {
 const contentPath = path.join(process.cwd(), "data", "content.json");
 
 export async function readContent(): Promise<SiteContent> {
+  if (hasBlobStorage()) {
+    const blobRaw = await readBlobText(CONTENT_BLOB_PATH);
+    if (blobRaw) {
+      try {
+        return mergeContent(JSON.parse(blobRaw) as Partial<SiteContent>);
+      } catch {
+        /* fall through to file/default */
+      }
+    }
+  }
+
   try {
     const raw = await readFile(contentPath, "utf-8");
     return mergeContent(JSON.parse(raw) as Partial<SiteContent>);
@@ -302,8 +319,19 @@ export async function readContent(): Promise<SiteContent> {
 }
 
 export async function writeContent(content: SiteContent): Promise<void> {
-  await mkdir(path.dirname(contentPath), { recursive: true });
-  await writeFile(contentPath, JSON.stringify(content, null, 2), "utf-8");
+  const json = JSON.stringify(content, null, 2);
+
+  if (hasBlobStorage()) {
+    await writeBlobText(CONTENT_BLOB_PATH, json, "application/json");
+    return;
+  }
+
+  try {
+    await mkdir(path.dirname(contentPath), { recursive: true });
+    await writeFile(contentPath, json, "utf-8");
+  } catch {
+    throw new Error("FILE_STORAGE_UNAVAILABLE");
+  }
 }
 
 export function mergeContent(partial: Partial<SiteContent>): SiteContent {

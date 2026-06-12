@@ -1,5 +1,6 @@
 import { isAdminAuthenticated } from "@/lib/auth";
 import { readContent, writeContent } from "@/lib/content";
+import { FAVICON_BLOB_PREFIX, hasBlobStorage, writeBlobFile } from "@/lib/content-storage";
 import { mkdir, writeFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import path from "path";
@@ -13,6 +14,14 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/svg+xml": "svg",
   "image/x-icon": "ico",
   "image/vnd.microsoft.icon": "ico",
+};
+
+const MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  ico: "image/x-icon",
 };
 
 export async function POST(request: Request) {
@@ -40,20 +49,35 @@ export async function POST(request: Request) {
       );
     }
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-
-    const filename = `favicon.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(uploadDir, filename), buffer);
+    let faviconPath: string;
 
-    const faviconPath = `/uploads/${filename}`;
+    if (hasBlobStorage()) {
+      faviconPath = await writeBlobFile(
+        `${FAVICON_BLOB_PREFIX}.${ext}`,
+        buffer,
+        MIME_TYPES[ext] || file.type,
+      );
+    } else {
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      const filename = `favicon.${ext}`;
+      await writeFile(path.join(uploadDir, filename), buffer);
+      faviconPath = `/uploads/${filename}`;
+    }
+
     const content = await readContent();
     content.seo.favicon = faviconPath;
     await writeContent(content);
 
     return NextResponse.json({ favicon: faviconPath });
-  } catch {
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message === "BLOB_STORAGE_UNAVAILABLE"
+        ? "Storage not configured. Add Vercel Blob to your project."
+        : error instanceof Error && error.message === "FILE_STORAGE_UNAVAILABLE"
+          ? "Cannot save files on this server. Enable Vercel Blob storage."
+          : "Upload failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
