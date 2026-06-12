@@ -53,7 +53,7 @@ function Field({
   hint?: string;
 }) {
   const inputClass =
-    "mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50";
+    "mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-base text-white placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50 sm:text-sm";
   return (
     <label className="block">
       <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">{label}</span>
@@ -90,7 +90,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-8 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl sm:p-8"
       >
         <h1 className="text-xl font-bold text-white">Portfolio Admin</h1>
         <p className="mt-2 text-sm text-zinc-400">Sign in to edit videos and site text.</p>
@@ -248,43 +248,49 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/95 px-6 py-4 backdrop-blur">
-        <div>
-          <h1 className="text-lg font-bold">Content Dashboard</h1>
-          <p className="text-xs text-zinc-500">Edit YouTube links and text by section</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="/" target="_blank" className="text-sm text-zinc-400 hover:text-white">
-            View site ↗
-          </a>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold hover:bg-orange-500 disabled:opacity-50"
-          >
-            <Save size={16} />
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-          <button
-            type="button"
-            onClick={logout}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:text-white"
-          >
-            <LogOut size={16} />
-            Logout
-          </button>
+    <div className="min-h-screen bg-zinc-950 pb-24 text-white sm:pb-8">
+      <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold sm:text-lg">Content Dashboard</h1>
+            <p className="text-xs text-zinc-500">Edit YouTube links and text by section</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <a
+              href="/"
+              target="_blank"
+              className="inline-flex flex-1 items-center justify-center rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 sm:flex-none sm:border-transparent sm:px-0 sm:py-0 sm:text-zinc-400 sm:hover:text-white"
+            >
+              View site ↗
+            </a>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="hidden items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold hover:bg-orange-500 disabled:opacity-50 sm:inline-flex"
+            >
+              <Save size={16} />
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white sm:flex-none"
+            >
+              <LogOut size={16} />
+              <span className="sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {message ? (
-        <div className="border-b border-emerald-900/50 bg-emerald-950/40 px-6 py-3 text-sm text-emerald-300">
+        <div className="border-b border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300 sm:px-6">
           {message}
         </div>
       ) : null}
 
-      <div className="mx-auto flex max-w-6xl gap-8 px-6 py-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-5 md:flex-row md:gap-8 md:px-6 md:py-8">
         <nav className="hidden w-48 shrink-0 flex-col gap-1 md:flex">
           {sections.map((s) => (
             <button
@@ -302,21 +308,26 @@ export default function AdminPage() {
           ))}
         </nav>
 
-        <div className="min-w-0 flex-1 space-y-6">
-          <select
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm md:hidden"
-            value={activeSection}
-            onChange={(e) => setActiveSection(e.target.value as SectionId)}
-          >
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+        <div className="min-w-0 flex-1 space-y-5 sm:space-y-6">
+          <label className="block md:hidden">
+            <span className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400">
+              Section
+            </span>
+            <select
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white sm:text-sm"
+              value={activeSection}
+              onChange={(e) => setActiveSection(e.target.value as SectionId)}
+            >
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {activeSection === "header" && (
-            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Header</h2>
               <Field label="Name" value={content.header.name} onChange={(v) => setContent({ ...content, header: { ...content.header, name: v } })} />
               <Field label="Tagline" value={content.header.tagline} onChange={(v) => setContent({ ...content, header: { ...content.header, tagline: v } })} />
@@ -326,7 +337,7 @@ export default function AdminPage() {
           )}
 
           {activeSection === "hero" && (
-            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Hero tagline</h2>
               <Field label="Prefix" value={content.hero.linePrefix} onChange={(v) => setContent({ ...content, hero: { ...content.hero, linePrefix: v } })} />
               <Field
@@ -345,7 +356,7 @@ export default function AdminPage() {
           )}
 
           {activeSection === "summary" && (
-            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Summary</h2>
               <Field label="Section title" value={content.summary.title} onChange={(v) => setContent({ ...content, summary: { ...content.summary, title: v } })} />
               <Field label="Professional profile" value={content.summary.professionalProfile} onChange={(v) => setContent({ ...content, summary: { ...content.summary, professionalProfile: v } })} multiline />
@@ -355,8 +366,8 @@ export default function AdminPage() {
 
           {activeSection === "highlights" && (
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Highlighted edits (YouTube videos)</h2>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-base font-semibold sm:text-lg">Highlighted edits (YouTube videos)</h2>
                 <button
                   type="button"
                   onClick={() =>
@@ -370,13 +381,13 @@ export default function AdminPage() {
                       },
                     })
                   }
-                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs hover:bg-zinc-800"
+                  className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-zinc-700 px-3 py-2.5 text-sm hover:bg-zinc-800 sm:w-auto sm:py-1.5 sm:text-xs"
                 >
                   <Plus size={14} /> Add video
                 </button>
               </div>
               {content.highlights.items.map((item, i) => (
-                <div key={i} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div key={i} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-zinc-300">Video {i + 1}</span>
                     <button
@@ -410,7 +421,7 @@ export default function AdminPage() {
               <Field label="Section title" value={content.skills.title} onChange={(v) => setContent({ ...content, skills: { ...content.skills, title: v } })} />
               <Field label="Subtitle" value={content.skills.subtitle} onChange={(v) => setContent({ ...content, skills: { ...content.skills, subtitle: v } })} multiline />
               {content.skills.blocks.map((block, i) => (
-                <div key={block.num} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div key={block.num} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <Field label="Block number" value={block.num} onChange={(v) => updateSkillBlock(i, { num: v })} />
                   <Field label="Title" value={block.title} onChange={(v) => updateSkillBlock(i, { title: v })} />
                   <Field
@@ -429,7 +440,7 @@ export default function AdminPage() {
               <Field label="Title" value={content.vault.title} onChange={(v) => setContent({ ...content, vault: { ...content.vault, title: v } })} />
               <Field label="Subtitle" value={content.vault.subtitle} onChange={(v) => setContent({ ...content, vault: { ...content.vault, subtitle: v } })} />
               {content.vault.playlists.map((pl, i) => (
-                <div key={pl.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div key={pl.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <span className="text-sm font-medium text-zinc-300">Playlist {i + 1}</span>
                   <Field label="Title" value={pl.title} onChange={(v) => updatePlaylist(i, { title: v })} />
                   <Field label="YouTube playlist URL" value={pl.href} onChange={(v) => updatePlaylist(i, { href: v })} />
@@ -444,7 +455,7 @@ export default function AdminPage() {
               <h2 className="text-lg font-semibold">Experience cards (YouTube reels)</h2>
               <Field label="Section title" value={content.experience.title} onChange={(v) => setContent({ ...content, experience: { ...content.experience, title: v } })} />
               {content.experience.roles.map((role, i) => (
-                <div key={role.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div key={role.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <span className="text-sm font-medium text-zinc-300">{role.company}</span>
                   <Field label="Company" value={role.company} onChange={(v) => updateRole(i, { company: v })} />
                   <Field label="Date range" value={role.dateRange} onChange={(v) => updateRole(i, { dateRange: v })} />
@@ -461,7 +472,7 @@ export default function AdminPage() {
               <h2 className="text-lg font-semibold">Services</h2>
               <Field label="Section title" value={content.services.title} onChange={(v) => setContent({ ...content, services: { ...content.services, title: v } })} />
               {content.services.items.map((svc, i) => (
-                <div key={svc.indexLabel} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+                <div key={svc.indexLabel} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <Field label="Index" value={svc.indexLabel} onChange={(v) => updateService(i, { indexLabel: v })} />
                   <Field label="Title" value={svc.title} onChange={(v) => updateService(i, { title: v })} />
                   <Field label="Description" value={svc.description} onChange={(v) => updateService(i, { description: v })} multiline />
@@ -471,7 +482,7 @@ export default function AdminPage() {
           )}
 
           {activeSection === "footer" && (
-            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Footer & contact</h2>
               <Field label="Name" value={content.footer.name} onChange={(v) => setContent({ ...content, footer: { ...content.footer, name: v } })} />
               <Field label="Tagline" value={content.footer.tagline} onChange={(v) => setContent({ ...content, footer: { ...content.footer, tagline: v } })} />
@@ -525,13 +536,26 @@ export default function AdminPage() {
           )}
 
           {activeSection === "seo" && (
-            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">SEO / page metadata</h2>
               <Field label="Page title" value={content.seo.title} onChange={(v) => setContent({ ...content, seo: { ...content.seo, title: v } })} />
               <Field label="Meta description" value={content.seo.description} onChange={(v) => setContent({ ...content, seo: { ...content.seo, description: v } })} multiline />
             </section>
           )}
         </div>
+      </div>
+
+      {/* Mobile sticky save bar */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-800 bg-zinc-950/95 p-3 backdrop-blur sm:hidden">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 py-3.5 text-sm font-semibold hover:bg-orange-500 disabled:opacity-50"
+        >
+          <Save size={18} />
+          {saving ? "Saving…" : "Save changes"}
+        </button>
       </div>
     </div>
   );

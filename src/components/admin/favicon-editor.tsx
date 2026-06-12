@@ -35,14 +35,14 @@ function checkerboardStyle(size = 12): React.CSSProperties {
 function TabPreview({ iconSrc, title }: { iconSrc: string; title: string }) {
   return (
     <div className="overflow-hidden rounded-t-xl border border-b-0 border-zinc-700 bg-zinc-800">
-      <div className="flex items-end gap-1 px-2 pt-2">
-        <div className="flex max-w-[220px] items-center gap-2 rounded-t-lg border border-b-0 border-zinc-600 bg-zinc-700 px-3 py-2 shadow-sm">
+      <div className="flex items-end gap-1 overflow-x-auto px-2 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-0 max-w-[min(100%,220px)] shrink-0 items-center gap-2 rounded-t-lg border border-b-0 border-zinc-600 bg-zinc-700 px-3 py-2 shadow-sm">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={iconSrc} alt="" className="h-4 w-4 shrink-0 object-contain" width={16} height={16} />
           <span className="truncate text-xs text-zinc-100">{title || "Your site"}</span>
-          <span className="ml-1 text-[10px] text-zinc-400">×</span>
+          <span className="ml-1 shrink-0 text-[10px] text-zinc-400">×</span>
         </div>
-        <div className="flex items-center gap-2 rounded-t-lg border border-b-0 border-transparent px-3 py-2 opacity-50">
+        <div className="hidden shrink-0 items-center gap-2 rounded-t-lg border border-b-0 border-transparent px-3 py-2 opacity-50 sm:flex">
           <span className="h-4 w-4 rounded-sm bg-zinc-600" />
           <span className="text-xs text-zinc-500">New tab</span>
         </div>
@@ -82,7 +82,7 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-orange-500"
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-orange-500 sm:h-1.5"
       />
     </label>
   );
@@ -172,9 +172,9 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
   };
 
   return (
-    <section className="space-y-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+    <section className="space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:space-y-6 sm:p-6">
       <div>
-        <h2 className="text-lg font-semibold">Website tab icon</h2>
+        <h2 className="text-base font-semibold sm:text-lg">Website tab icon</h2>
         <p className="mt-1 text-sm text-zinc-400">
           Upload an image, preview it in a browser tab, then zoom and drag to frame it before saving.
         </p>
@@ -209,7 +209,7 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Adjust framing</p>
 
           <div
-            className="relative mx-auto aspect-square w-full max-w-[240px] cursor-grab overflow-hidden rounded-xl border border-zinc-600 active:cursor-grabbing"
+            className="relative mx-auto aspect-square w-full max-w-[min(100%,280px)] cursor-grab touch-none overflow-hidden rounded-xl border border-zinc-600 active:cursor-grabbing sm:max-w-[240px]"
             style={editorBackground}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -293,7 +293,7 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-5">
+      <div className="flex flex-col gap-2 border-t border-zinc-800 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <input
           ref={fileInputRef}
           type="file"
@@ -308,7 +308,7 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium hover:bg-zinc-800"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 px-4 py-3 text-sm font-medium hover:bg-zinc-800 sm:w-auto sm:py-2.5"
         >
           <Upload size={16} />
           {image ? "Choose different image" : "Choose image"}
@@ -317,7 +317,7 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
           <button
             type="button"
             onClick={() => void loadSource(() => loadImageFromUrl(`${currentFavicon}?t=${Date.now()}`), "Current tab icon")}
-            className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800"
+            className="w-full rounded-lg border border-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 sm:w-auto sm:py-2.5"
           >
             Reload current icon
           </button>
@@ -326,11 +326,13 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
           type="button"
           disabled={!image || uploading}
           onClick={() => void handleSave()}
-          className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold hover:bg-orange-500 disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold hover:bg-orange-500 disabled:opacity-50 sm:w-auto sm:py-2.5"
         >
           {uploading ? "Saving…" : "Save tab icon"}
         </button>
-        {sourceLabel ? <span className="text-xs text-zinc-500">Source: {sourceLabel}</span> : null}
+        {sourceLabel ? (
+          <span className="text-center text-xs text-zinc-500 sm:text-left">Source: {sourceLabel}</span>
+        ) : null}
       </div>
 
       {loadError ? <p className="text-sm text-red-400">{loadError}</p> : null}
