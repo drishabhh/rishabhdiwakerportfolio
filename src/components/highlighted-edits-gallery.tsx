@@ -4,6 +4,7 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useSpring, useTra
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Play, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 
 export type HighlightEditItem = {
   title: string;
@@ -270,9 +271,14 @@ function HighlightCard({ item, physicalIndex, visualIndex, total, isDark, active
 type HighlightedEditsGalleryProps = {
   items: HighlightEditItem[];
   isDark: boolean;
+  sectionTitleClass?: string;
 };
 
-export function HighlightedEditsGallery({ items, isDark }: HighlightedEditsGalleryProps) {
+export function HighlightedEditsGallery({
+  items,
+  isDark,
+  sectionTitleClass = SECTION_TITLE_ON_HERO,
+}: HighlightedEditsGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const stripARef = useRef<HTMLDivElement>(null);
@@ -450,21 +456,12 @@ export function HighlightedEditsGallery({ items, isDark }: HighlightedEditsGalle
       className="relative left-1/2 z-10 w-screen max-w-[100vw] -translate-x-1/2 scroll-mt-28 space-y-0 overflow-x-clip"
       aria-labelledby="highlighted-edits-heading"
     >
-      <div className="relative z-20 mx-auto mb-5 flex max-w-6xl items-center justify-between gap-4 px-6 md:px-10">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span
-            className="h-px w-10 shrink-0 bg-white md:w-12 [box-shadow:0_1px_3px_rgba(0,0,0,0.45)]"
-            aria-hidden
-          />
-          <h3
-            id="highlighted-edits-heading"
-            className="truncate text-xs font-semibold uppercase tracking-[0.22em] text-white title-glow-opposite-light-text md:text-sm"
-          >
-            Highlighted edits
-          </h3>
-        </div>
+      <div className="relative z-20 mx-auto mb-5 flex max-w-6xl items-end justify-between gap-4 px-6 md:mb-6 md:px-10">
+        <h2 id="highlighted-edits-heading" className={sectionTitleClass}>
+          Highlighted edits
+        </h2>
         <span
-          className="shrink-0 font-mono text-xs tabular-nums tracking-widest text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.5)] sm:text-sm"
+          className="shrink-0 font-mono text-xs tabular-nums tracking-widest text-white/80 sm:text-sm"
           aria-hidden
         >
           (01)

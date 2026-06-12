@@ -3,6 +3,8 @@
 import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
 import { useCallback, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import type { SocialLink } from "@/lib/content";
+import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 
 const FOOTER_BG = "#0A0A0A";
 const ORANGE_GLOW = "rgba(255, 77, 0, 0.05)";
@@ -60,7 +62,6 @@ function MagneticAnchor({ href, children, className, reduced, strength = 12 }: M
   );
 }
 
-import type { SocialLink } from "@/lib/content";
 
 export type SiteFooterProps = {
   name: string;
@@ -68,9 +69,17 @@ export type SiteFooterProps = {
   statusLabel: string;
   email: string;
   socials: SocialLink[];
+  sectionTitleClass?: string;
 };
 
-export function SiteFooter({ name, tagline, statusLabel, email, socials }: SiteFooterProps) {
+export function SiteFooter({
+  name,
+  tagline,
+  statusLabel,
+  email,
+  socials,
+  sectionTitleClass = SECTION_TITLE_ON_HERO,
+}: SiteFooterProps) {
   const reduced = Boolean(useReducedMotion());
   const rootRef = useRef<HTMLElement>(null);
   const [footHot, setFootHot] = useState(false);
@@ -109,7 +118,7 @@ export function SiteFooter({ name, tagline, statusLabel, email, socials }: SiteF
       onMouseMove={paint}
       onMouseLeave={clearPointer}
       style={{ backgroundColor: FOOTER_BG, ...baseStyle }}
-      className="relative isolate overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-28 pt-14 text-white md:pb-32 md:pt-16"
+      className="relative isolate scroll-mt-28 overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-28 pt-14 text-white md:pb-32 md:pt-16"
     >
       {/* Flashlight — brighter neutral so white copy reads as the beam passes */}
       <motion.div
@@ -154,10 +163,7 @@ export function SiteFooter({ name, tagline, statusLabel, email, socials }: SiteF
       </div>
 
       <div className="relative z-10 mx-auto max-w-6xl px-6 md:px-10">
-        <h2
-          id="contact-credits-heading"
-          className="mb-10 text-xs font-bold uppercase tracking-[0.26em] text-white title-glow-opposite-light-text md:mb-12 md:text-sm"
-        >
+        <h2 id="contact-credits-heading" className={`mb-10 md:mb-12 ${sectionTitleClass}`}>
           Contact &amp; Credits
         </h2>
 

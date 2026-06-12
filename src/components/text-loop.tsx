@@ -20,21 +20,43 @@ function fontVarForIndex(i: number): string {
   return TRANSITION_FONT_VARS[i % NUM_FONTS] ?? TRANSITION_FONT_VARS[0];
 }
 
+function longestChildText(items: ReturnType<typeof Children.toArray>): string {
+  return items.reduce<string>((longest, item) => {
+    const text =
+      typeof item === "string"
+        ? item
+        : typeof item === "object" && item !== null && "props" in item
+          ? String((item as { props?: { children?: string } }).props?.children ?? "")
+          : "";
+    return text.length > longest.length ? text : longest;
+  }, "");
+}
+
 export type TextLoopProps = {
   /** Milliseconds between each word step. */
   interval?: number;
   children: ReactNode;
   className?: string;
+  /** Fixed-height slot so word swaps do not shift surrounding layout. */
+  stableSlot?: boolean;
+  /** Cycle display fonts each step (off by default when stableSlot is on). */
+  rotateFonts?: boolean;
 };
 
 /**
- * Cycles words one-by-one (no repeated word frames), while rotating fonts.
- * Blur/slide + shiver on each step.
+ * Cycles words one-by-one (no repeated word frames), optionally rotating fonts.
  */
-export function TextLoop({ interval = 2000, children, className }: TextLoopProps) {
+export function TextLoop({
+  interval = 2000,
+  children,
+  className = "",
+  stableSlot = false,
+  rotateFonts,
+}: TextLoopProps) {
   const items = Children.toArray(children).filter(Boolean);
   const [stepIndex, setStepIndex] = useState(0);
   const prefersReducedMotion = useReducedMotion();
+  const useRotatingFonts = rotateFonts ?? !stableSlot;
 
   useEffect(() => {
     if (prefersReducedMotion || items.length === 0) return;
@@ -48,12 +70,11 @@ export function TextLoop({ interval = 2000, children, className }: TextLoopProps
   const w = prefersReducedMotion ? 0 : stepIndex % items.length;
   const f = prefersReducedMotion ? 0 : stepIndex % NUM_FONTS;
   const current = items[w] ?? items[0];
-  const fontFamily = fontVarForIndex(f);
+  const fontFamily = useRotatingFonts ? fontVarForIndex(f) : undefined;
+  const motionKey = useRotatingFonts ? `${w}-${f}` : `${w}`;
 
   const enterOpacity = 0.055;
-  const enterMove = 0.075;
   const enterBlur = 0.06;
-  const shiverDur = 0.14;
 
   if (items.length === 0) {
     return null;
@@ -62,38 +83,46 @@ export function TextLoop({ interval = 2000, children, className }: TextLoopProps
   if (prefersReducedMotion) {
     return (
       <span className={className}>
-        <span
-          className="inline-block w-full text-center"
-          style={{ fontFamily }}
-        >
+        <span className="leading-none" style={fontFamily ? { fontFamily } : undefined}>
           {current}
         </span>
       </span>
     );
   }
 
-  return (
-    <span className={className}>
-      <motion.span
-        key={`${w}-${f}`}
-        initial={{ opacity: 0, y: 8, x: 0, filter: "blur(5px)" }}
-        animate={{
-          opacity: 1,
-          y: 0,
-          filter: "blur(0px)",
-          x: [0, -7, 7, -6, 6, -5, 5, -3, 3, -2, 2, 0],
-        }}
-        transition={{
-          opacity: { duration: enterOpacity, ease: cinematicEase },
-          filter: { duration: enterBlur, ease: cinematicEase },
-          y: { duration: enterMove, ease: cinematicEase },
-          x: { duration: shiverDur, ease: "linear", delay: 0.04 },
-        }}
-        className="inline-block w-full text-center will-change-transform"
-        style={{ fontFamily }}
-      >
-        {current}
-      </motion.span>
-    </span>
+  const wordNode = (
+    <motion.span
+      key={motionKey}
+      initial={{ opacity: 0, filter: "blur(5px)" }}
+      animate={{
+        opacity: 1,
+        filter: "blur(0px)",
+      }}
+      transition={{
+        opacity: { duration: enterOpacity, ease: cinematicEase },
+        filter: { duration: enterBlur, ease: cinematicEase },
+      }}
+      className={
+        stableSlot
+          ? "absolute inset-0 flex items-center justify-center leading-none will-change-[opacity,filter]"
+          : "inline-block w-full text-center will-change-[opacity,filter]"
+      }
+      style={fontFamily ? { fontFamily } : undefined}
+    >
+      {current}
+    </motion.span>
   );
+
+  if (stableSlot) {
+    return (
+      <span className={`relative inline-block shrink-0 align-middle leading-none ${className}`}>
+        <span aria-hidden className="invisible whitespace-nowrap leading-none">
+          {longestChildText(items)}
+        </span>
+        {wordNode}
+      </span>
+    );
+  }
+
+  return <span className={className}>{wordNode}</span>;
 }

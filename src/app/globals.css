@@ -21,50 +21,6 @@
 
 /* Hero TextLoop fonts: `--font-syne`, `--font-space-mono`, etc. (see layout). */
 
-/* Hero tagline: jitter/flash on trailing + only; GPU-friendly transform + color. */
-@keyframes sonic-shiver-plus {
-  0% {
-    transform: translate(-2px, -1px) scale(1);
-    color: #ffffff;
-  }
-  20% {
-    transform: translate(2px, 1px) scale(1.2);
-    color: #ff4d00;
-  }
-  40% {
-    transform: translate(-1px, -2px) scale(1);
-    color: #ffffff;
-  }
-  60% {
-    transform: translate(1px, 2px) scale(1.2);
-    color: #ff4d00;
-  }
-  80% {
-    transform: translate(-2px, 1px) scale(1.15);
-    color: #ffffff;
-  }
-  100% {
-    transform: translate(0, 0) scale(1);
-    color: #ffffff;
-  }
-}
-
-.sonic-shiver-plus {
-  display: inline-block;
-  vertical-align: baseline;
-  transform-origin: 100% 50%;
-  will-change: transform;
-  animation: sonic-shiver-plus 0.1s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sonic-shiver-plus {
-    animation: none;
-    transform: none;
-    color: #ffffff;
-  }
-}
-
 * {
   box-sizing: border-box;
 }

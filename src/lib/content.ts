@@ -12,113 +12,34 @@ import {
   readGitHubText,
   writeGitHubText,
 } from "./github-content";
+import { originalHighlightItems } from "./original-highlights";
 
-export type HighlightItem = {
-  title: string;
-  views: string;
-  caption?: string;
-  href: string;
-  badge?: string;
-};
-
-export type SkillBlock = {
-  num: string;
-  title: string;
-  tags: string[];
-};
-
-export type VaultPlaylist = {
-  id: string;
-  title: string;
-  description: string;
-  href: string;
-};
-
-export type ExperienceRole = {
-  id: string;
-  company: string;
-  dateRange: string;
-  role: string;
-  tagline: string;
-  videoUrl: string;
-  embedStart?: number;
-};
-
-export type ServiceItem = {
-  indexLabel: string;
-  title: string;
-  description: string;
-  icon: "film" | "post" | "ai" | "growth";
-};
-
-export type SocialLink = {
-  label: string;
-  href: string;
-};
-
-export type SiteContent = {
-  header: {
-    name: string;
-    tagline: string;
-    statusLabel: string;
-    youtubeUrl: string;
-  };
-  hero: {
-    linePrefix: string;
-    rotatingWords: string[];
-    lineSuffix: string;
-  };
-  summary: {
-    title: string;
-    professionalProfile: string;
-    corePhilosophy: string;
-  };
-  highlights: {
-    items: HighlightItem[];
-  };
-  skills: {
-    title: string;
-    subtitle: string;
-    blocks: SkillBlock[];
-  };
-  vault: {
-    title: string;
-    subtitle: string;
-    playlists: VaultPlaylist[];
-  };
-  experience: {
-    title: string;
-    roles: ExperienceRole[];
-  };
-  services: {
-    title: string;
-    items: ServiceItem[];
-  };
-  footer: {
-    name: string;
-    tagline: string;
-    statusLabel: string;
-    email: string;
-    socials: SocialLink[];
-  };
-  seo: {
-    title: string;
-    description: string;
-    favicon: string;
-  };
-};
+export type {
+  ExperienceRole,
+  HighlightItem,
+  ServiceItem,
+  SiteContent,
+  SkillBlock,
+  SocialLink,
+  VaultPlaylist,
+} from "./content-types";
+import type { SiteContent } from "./content-types";
 
 export const defaultContent: SiteContent = {
   header: {
     name: "Rishabh Diwaker",
     tagline: "Video Editor · AI-Augmented Post-Production Specialist",
     statusLabel: "Open to work",
-    youtubeUrl: "https://youtube.com/@rishabhsportfolio?si=NTQ5HeB8CZYCBMrD",
+    whatsappUrl: "https://wa.me/918077884422",
   },
   hero: {
     linePrefix: "Engineered to",
     rotatingWords: ["Skyrocket", "Amplify", "Scale", "Boost", "Multiply"],
     lineSuffix: "your views",
+    cta: {
+      label: "Watch showreel",
+      href: "https://youtu.be/AtdjWGqebMY?si=OZT9l5M-jU5eDZoG",
+    },
   },
   summary: {
     title: "Summary",
@@ -128,45 +49,10 @@ export const defaultContent: SiteContent = {
       "My work centers on optimizing workflows through AI and automation while maintaining editorial precision to increase audience retention and watch time.",
   },
   highlights: {
-    items: [
-      {
-        title: "TEDx",
-        views: "12.8K",
-        caption: "views in the first 3 days",
-        href: "https://www.youtube.com/watch?v=FHkwqGr1pjg&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe",
-        badge: "Viral in 3 Days",
-      },
-      {
-        title: "Byte Blogger Base",
-        views: "127K+",
-        caption: "organic channel views",
-        href: "https://www.youtube.com/watch?v=lVwL8VMkDmY&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe&index=3",
-      },
-      {
-        title: "Sri Mandir · AppsForBharat",
-        views: "250K+",
-        caption: "direct users on launch content",
-        href: "https://www.youtube.com/watch?v=h-V0NykeWRg&list=PLdT9F7iP4yrSzqcvIypf3DHJQYTHNiniO&index=7",
-      },
-      {
-        title: "AppsForBharat · Events",
-        views: "14%",
-        caption: "event participation lift",
-        href: "https://www.youtube.com/watch?v=ULoPlgS6u0s&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=23",
-      },
-      {
-        title: "Byte Blogger Base · Retention",
-        views: "40%+",
-        caption: "avg. watch time lift",
-        href: "https://www.youtube.com/watch?v=KviJ-1cMY8g&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL",
-      },
-      {
-        title: "AppsForBharat · Distribution",
-        views: "19%",
-        caption: "unique content shares lift",
-        href: "https://www.youtube.com/watch?v=cMbVMK77Zco&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=22",
-      },
-    ],
+    items: originalHighlightItems.map((item) => ({ ...item })),
+  },
+  trash: {
+    highlights: [],
   },
   skills: {
     title: "Skills",
@@ -281,7 +167,7 @@ export const defaultContent: SiteContent = {
   },
   footer: {
     name: "RISHABH DIWAKER",
-    tagline: "Video Editor & AI-Augmented Post-Production Specialist.",
+    tagline: "Video Editor · AI-Augmented Post-Production Specialist",
     statusLabel: "Available for projects",
     email: "rishabhdiwaker0012@gmail.com",
     socials: [
@@ -299,6 +185,10 @@ export const defaultContent: SiteContent = {
     title: "Rishabh Diwaker | Portfolio",
     description: "Portfolio of Rishabh Diwaker, digital content creator and SEO strategist.",
     favicon: "",
+  },
+  resume: {
+    url: "/rishabh-diwaker-cv.pdf",
+    downloadName: "Rishabh-Diwaker-CV.pdf",
   },
 };
 
@@ -364,15 +254,44 @@ export function mergeContent(partial: Partial<SiteContent>): SiteContent {
   return {
     ...defaultContent,
     ...partial,
-    header: { ...defaultContent.header, ...partial.header },
-    hero: { ...defaultContent.hero, ...partial.hero },
+    header: {
+      ...defaultContent.header,
+      ...partial.header,
+      whatsappUrl:
+        partial.header?.whatsappUrl ??
+        (partial.header as { youtubeUrl?: string } | undefined)?.youtubeUrl ??
+        defaultContent.header.whatsappUrl,
+    },
+    hero: {
+      ...defaultContent.hero,
+      ...partial.hero,
+      cta: {
+        ...defaultContent.hero.cta,
+        ...partial.hero?.cta,
+      },
+    },
     summary: { ...defaultContent.summary, ...partial.summary },
-    highlights: { ...defaultContent.highlights, ...partial.highlights },
+    highlights: {
+      items: partial.highlights?.items ?? defaultContent.highlights.items,
+    },
+    trash: {
+      highlights: partial.trash?.highlights ?? defaultContent.trash?.highlights ?? [],
+    },
     skills: { ...defaultContent.skills, ...partial.skills },
     vault: { ...defaultContent.vault, ...partial.vault },
     experience: { ...defaultContent.experience, ...partial.experience },
     services: { ...defaultContent.services, ...partial.services },
-    footer: { ...defaultContent.footer, ...partial.footer },
+    footer: {
+      ...defaultContent.footer,
+      ...partial.footer,
+      tagline:
+        partial.header?.tagline ??
+        partial.footer?.tagline ??
+        defaultContent.header.tagline,
+    },
     seo: { ...defaultContent.seo, ...partial.seo },
+    resume: { ...defaultContent.resume, ...partial.resume },
   };
 }
+
+export { originalHighlightItems } from "./original-highlights";

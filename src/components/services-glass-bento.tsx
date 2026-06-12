@@ -4,8 +4,9 @@ import type { ServiceItem } from "@/lib/content";
 import { LayoutGroup, motion, type Variants } from "framer-motion";
 import { useCallback, type CSSProperties, type MouseEvent, type SVGProps } from "react";
 
-const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 
+const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const layoutSpring = { type: "spring" as const, stiffness: 170, damping: 28, mass: 0.9 };
 
 
@@ -229,13 +230,22 @@ const cardVariants: Variants = {
 export type ServicesGlassBentoProps = {
   isDark: boolean;
   headingClass: string;
+  sectionTitleClass?: string;
   mutedClass: string;
   cardSurfaceClass: string;
   title: string;
   services: ServiceItem[];
 };
 
-export function ServicesGlassBento({ isDark, headingClass, mutedClass, cardSurfaceClass, title, services }: ServicesGlassBentoProps) {
+export function ServicesGlassBento({
+  isDark,
+  headingClass,
+  sectionTitleClass = SECTION_TITLE_ON_HERO,
+  mutedClass,
+  cardSurfaceClass,
+  title,
+  services,
+}: ServicesGlassBentoProps) {
   const indexClass = isDark ? "text-zinc-600" : "text-zinc-300";
   const iconBoxClass = isDark
     ? "bg-zinc-800 text-zinc-100 ring-1 ring-white/10"
@@ -271,12 +281,12 @@ export function ServicesGlassBento({ isDark, headingClass, mutedClass, cardSurfa
       aria-labelledby="services-heading"
     >
       <LayoutGroup id="services-bento-layout">
-        <div className="relative z-20 pt-8 md:pt-12">
+        <div className="relative z-20">
           <motion.h2
             layout
             transition={{ layout: layoutSpring }}
             id="services-heading"
-            className="text-xs font-extrabold uppercase tracking-[0.22em] text-white title-glow-opposite-light-text sm:text-sm sm:tracking-[0.26em]"
+            className={sectionTitleClass}
           >
             {title}
           </motion.h2>

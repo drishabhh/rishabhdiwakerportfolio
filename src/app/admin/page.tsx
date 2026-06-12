@@ -1,6 +1,7 @@
 "use client";
 
 import { FaviconEditor } from "@/components/admin/favicon-editor";
+import { ResumeEditor } from "@/components/admin/resume-editor";
 import type {
   ExperienceRole,
   HighlightItem,
@@ -8,8 +9,9 @@ import type {
   SiteContent,
   SkillBlock,
   VaultPlaylist,
-} from "@/lib/content";
-import { LogOut, Plus, Save, Trash2 } from "lucide-react";
+} from "@/lib/content-types";
+import { originalHighlightItems } from "@/lib/original-highlights";
+import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 type SectionId =
@@ -22,6 +24,7 @@ type SectionId =
   | "experience"
   | "services"
   | "footer"
+  | "resume"
   | "seo"
   | "tabIcon";
 
@@ -35,6 +38,7 @@ const sections: { id: SectionId; label: string }[] = [
   { id: "experience", label: "Experience (Videos)" },
   { id: "services", label: "Services" },
   { id: "footer", label: "Footer & Contact" },
+  { id: "resume", label: "Resume / CV" },
   { id: "tabIcon", label: "Tab Icon" },
   { id: "seo", label: "SEO" },
 ];
@@ -125,6 +129,8 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [iconError, setIconError] = useState("");
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [resumeError, setResumeError] = useState("");
 
   const loadSession = useCallback(async () => {
     const res = await fetch("/api/admin/session");
@@ -187,6 +193,27 @@ export default function AdminPage() {
     setTimeout(() => setMessage(""), 4000);
   };
 
+  const uploadResume = async (file: File, downloadName: string) => {
+    setUploadingResume(true);
+    setResumeError("");
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("downloadName", downloadName);
+    const res = await fetch("/api/admin/resume", { method: "POST", body: formData });
+    setUploadingResume(false);
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setResumeError(data.error || "Upload failed");
+      return;
+    }
+    const data = (await res.json()) as { url: string; downloadName: string };
+    setContent((c) =>
+      c ? { ...c, resume: { url: data.url, downloadName: data.downloadName } } : c,
+    );
+    setMessage("Resume uploaded! The download button on the site is updated.");
+    setTimeout(() => setMessage(""), 4000);
+  };
+
   if (authenticated === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
@@ -213,6 +240,83 @@ export default function AdminPage() {
       const items = [...c.highlights.items];
       items[index] = { ...items[index]!, ...patch };
       return { ...c, highlights: { items } };
+    });
+  };
+
+  const trashHighlights = content?.trash?.highlights ?? [];
+
+  const deleteHighlight = (index: number) => {
+    setContent((c) => {
+      if (!c) return c;
+      const removed = c.highlights.items[index];
+      if (!removed) return c;
+      return {
+        ...c,
+        highlights: { items: c.highlights.items.filter((_, j) => j !== index) },
+        trash: {
+          highlights: [...(c.trash?.highlights ?? []), removed],
+        },
+      };
+    });
+  };
+
+  const restoreHighlightFromTrash = (index: number) => {
+    setContent((c) => {
+      if (!c) return c;
+      const item = c.trash?.highlights[index];
+      if (!item) return c;
+      return {
+        ...c,
+        highlights: { items: [...c.highlights.items, item] },
+        trash: {
+          highlights: (c.trash?.highlights ?? []).filter((_, j) => j !== index),
+        },
+      };
+    });
+  };
+
+  const permanentlyDeleteFromTrash = (index: number) => {
+    setContent((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        trash: {
+          highlights: (c.trash?.highlights ?? []).filter((_, j) => j !== index),
+        },
+      };
+    });
+  };
+
+  const restoreAllOriginalHighlights = () => {
+    setContent((c) => {
+      if (!c) return c;
+      const current = c.highlights.items;
+      const originals = originalHighlightItems;
+      const removed = current.filter(
+        (item) => !originals.some((o) => o.href === item.href && o.title === item.title),
+      );
+      return {
+        ...c,
+        highlights: { items: originals.map((item) => ({ ...item })) },
+        trash: {
+          highlights: [...(c.trash?.highlights ?? []), ...removed],
+        },
+      };
+    });
+    setMessage("Original 6 highlight videos restored. Click Save changes to publish.");
+    setTimeout(() => setMessage(""), 5000);
+  };
+
+  const restoreAllFromTrash = () => {
+    setContent((c) => {
+      if (!c) return c;
+      const bin = c.trash?.highlights ?? [];
+      if (bin.length === 0) return c;
+      return {
+        ...c,
+        highlights: { items: [...c.highlights.items, ...bin] },
+        trash: { highlights: [] },
+      };
     });
   };
 
@@ -341,9 +445,25 @@ export default function AdminPage() {
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Header</h2>
               <Field label="Name" value={content.header.name} onChange={(v) => setContent({ ...content, header: { ...content.header, name: v } })} />
-              <Field label="Tagline" value={content.header.tagline} onChange={(v) => setContent({ ...content, header: { ...content.header, tagline: v } })} />
+              <Field
+                label="Tagline"
+                value={content.header.tagline}
+                onChange={(v) =>
+                  setContent({
+                    ...content,
+                    header: { ...content.header, tagline: v },
+                    footer: { ...content.footer, tagline: v },
+                  })
+                }
+                hint="Shown under your name in the header and footer"
+              />
               <Field label="Status badge" value={content.header.statusLabel} onChange={(v) => setContent({ ...content, header: { ...content.header, statusLabel: v } })} />
-              <Field label="YouTube URL" value={content.header.youtubeUrl} onChange={(v) => setContent({ ...content, header: { ...content.header, youtubeUrl: v } })} hint="Link in the top navigation" />
+              <Field
+                label="WhatsApp URL"
+                value={content.header.whatsappUrl}
+                onChange={(v) => setContent({ ...content, header: { ...content.header, whatsappUrl: v } })}
+                hint="WhatsApp icon link in the top navigation"
+              />
             </section>
           )}
 
@@ -363,6 +483,39 @@ export default function AdminPage() {
                 hint="Words that cycle in the hero line"
               />
               <Field label="Suffix" value={content.hero.lineSuffix} onChange={(v) => setContent({ ...content, hero: { ...content.hero, lineSuffix: v } })} />
+              <Field
+                label="CTA button label"
+                value={content.hero.cta?.label ?? ""}
+                onChange={(v) =>
+                  setContent({
+                    ...content,
+                    hero: {
+                      ...content.hero,
+                      cta: {
+                        label: v,
+                        href: content.hero.cta?.href ?? "",
+                      },
+                    },
+                  })
+                }
+                hint="Home screen call-to-action button"
+              />
+              <Field
+                label="CTA link (YouTube URL)"
+                value={content.hero.cta?.href ?? ""}
+                onChange={(v) =>
+                  setContent({
+                    ...content,
+                    hero: {
+                      ...content.hero,
+                      cta: {
+                        label: content.hero.cta?.label ?? "Watch showreel",
+                        href: v,
+                      },
+                    },
+                  })
+                }
+              />
             </section>
           )}
 
@@ -377,41 +530,48 @@ export default function AdminPage() {
 
           {activeSection === "highlights" && (
             <section className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3">
                 <h2 className="text-base font-semibold sm:text-lg">Highlighted edits (YouTube videos)</h2>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setContent({
-                      ...content,
-                      highlights: {
-                        items: [
-                          ...content.highlights.items,
-                          { title: "New highlight", views: "0", caption: "", href: "", badge: "" },
-                        ],
-                      },
-                    })
-                  }
-                  className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-zinc-700 px-3 py-2.5 text-sm hover:bg-zinc-800 sm:w-auto sm:py-1.5 sm:text-xs"
-                >
-                  <Plus size={14} /> Add video
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setContent({
+                        ...content,
+                        highlights: {
+                          items: [
+                            ...content.highlights.items,
+                            { title: "New highlight", views: "0", caption: "", href: "", badge: "" },
+                          ],
+                        },
+                      })
+                    }
+                    className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-zinc-700 px-3 py-2.5 text-sm hover:bg-zinc-800 sm:w-auto sm:py-2"
+                  >
+                    <Plus size={14} /> Add video
+                  </button>
+                  <button
+                    type="button"
+                    onClick={restoreAllOriginalHighlights}
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-orange-700/60 bg-orange-950/30 px-3 py-2.5 text-sm text-orange-200 hover:bg-orange-950/50 sm:w-auto sm:py-2"
+                  >
+                    <RotateCcw size={14} /> Restore original 6 videos
+                  </button>
+                </div>
               </div>
+
               {content.highlights.items.map((item, i) => (
-                <div key={i} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
+                <div key={`${item.href}-${i}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-zinc-300">Video {i + 1}</span>
                     <button
                       type="button"
-                      onClick={() =>
-                        setContent({
-                          ...content,
-                          highlights: { items: content.highlights.items.filter((_, j) => j !== i) },
-                        })
-                      }
-                      className="text-zinc-500 hover:text-red-400"
+                      onClick={() => deleteHighlight(i)}
+                      className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
+                      title="Move to trash"
                     >
                       <Trash2 size={16} />
+                      <span className="hidden sm:inline">Move to trash</span>
                     </button>
                   </div>
                   <Field label="Title" value={item.title} onChange={(v) => updateHighlight(i, { title: v })} />
@@ -423,6 +583,55 @@ export default function AdminPage() {
                   <Field label="Caption" value={item.caption || ""} onChange={(v) => updateHighlight(i, { caption: v })} />
                 </div>
               ))}
+
+              {trashHighlights.length > 0 ? (
+                <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-4 sm:p-5">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <Trash2 size={16} className="text-zinc-500" />
+                      <h3 className="text-sm font-semibold text-zinc-300">
+                        Trash ({trashHighlights.length})
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={restoreAllFromTrash}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-600 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 sm:py-1.5"
+                    >
+                      <Undo2 size={14} /> Restore all
+                    </button>
+                  </div>
+                  <ul className="space-y-2">
+                    {trashHighlights.map((item, i) => (
+                      <li
+                        key={`trash-${item.href}-${i}`}
+                        className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-zinc-200">{item.title || "Untitled"}</p>
+                          <p className="truncate text-xs text-zinc-500">{item.href || "No URL"}</p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => restoreHighlightFromTrash(i)}
+                            className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-emerald-800/60 bg-emerald-950/30 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/50 sm:flex-none"
+                          >
+                            <Undo2 size={12} /> Restore
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => permanentlyDeleteFromTrash(i)}
+                            className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-red-400 sm:flex-none"
+                          >
+                            <Trash2 size={12} /> Delete forever
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
           )}
 
@@ -495,8 +704,10 @@ export default function AdminPage() {
           {activeSection === "footer" && (
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Footer & contact</h2>
+              <p className="text-xs text-zinc-500">
+                Tagline is edited in the Header section and appears in both places.
+              </p>
               <Field label="Name" value={content.footer.name} onChange={(v) => setContent({ ...content, footer: { ...content.footer, name: v } })} />
-              <Field label="Tagline" value={content.footer.tagline} onChange={(v) => setContent({ ...content, footer: { ...content.footer, tagline: v } })} />
               <Field label="Status label" value={content.footer.statusLabel} onChange={(v) => setContent({ ...content, footer: { ...content.footer, statusLabel: v } })} />
               <Field label="Email" value={content.footer.email} onChange={(v) => setContent({ ...content, footer: { ...content.footer, email: v } })} />
               {content.footer.socials.map((social, i) => (
@@ -534,6 +745,25 @@ export default function AdminPage() {
                 <Plus size={14} /> Add social link
               </button>
             </section>
+          )}
+
+          {activeSection === "resume" && (
+            <ResumeEditor
+              currentUrl={content.resume?.url || undefined}
+              downloadName={content.resume?.downloadName ?? "Rishabh-Diwaker-CV.pdf"}
+              onDownloadNameChange={(v) =>
+                setContent({
+                  ...content,
+                  resume: {
+                    url: content.resume?.url ?? "",
+                    downloadName: v,
+                  },
+                })
+              }
+              uploading={uploadingResume}
+              error={resumeError}
+              onUpload={uploadResume}
+            />
           )}
 
           {activeSection === "tabIcon" && (

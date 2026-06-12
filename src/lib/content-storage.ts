@@ -2,6 +2,7 @@ import { get, head, put } from "@vercel/blob";
 
 const CONTENT_BLOB_PATH = "portfolio/content.json";
 const FAVICON_BLOB_PREFIX = "portfolio/favicon";
+const RESUME_BLOB_PATH = "portfolio/resume.pdf";
 
 export function hasBlobStorage(): boolean {
   return Boolean(
@@ -48,4 +49,4 @@ export async function writeBlobFile(pathname: string, body: Buffer, contentType:
   return result.url;
 }
 
-export { CONTENT_BLOB_PATH, FAVICON_BLOB_PREFIX };
+export { CONTENT_BLOB_PATH, FAVICON_BLOB_PREFIX, RESUME_BLOB_PATH };

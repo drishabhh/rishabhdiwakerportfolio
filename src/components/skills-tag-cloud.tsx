@@ -1,6 +1,7 @@
 "use client";
 
 import type { SkillBlock } from "@/lib/content";
+import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "framer-motion";
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
@@ -242,14 +243,7 @@ export function SkillsTagCloud({
   return (
     <div className="space-y-6 md:space-y-7">
       <div>
-        <h2
-          className={
-            sectionTitleClass ??
-            `text-3xl font-bold tracking-[-0.02em] md:text-4xl md:font-extrabold md:tracking-[-0.03em] ${headingClass}`
-          }
-        >
-          {title}
-        </h2>
+        <h2 className={sectionTitleClass ?? SECTION_TITLE_ON_HERO}>{title}</h2>
         <p
           className={`mt-3 max-w-2xl text-sm font-medium leading-relaxed tracking-tight md:text-base ${subheadingClass}`}
         >
