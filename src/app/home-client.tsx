@@ -13,12 +13,14 @@ import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { smoothScrollToElement } from "@/lib/smooth-scroll";
 import { youtubeThumbnailFromUrl } from "@/lib/youtube";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
 import { Archive, Briefcase, FileText, House, LayoutGrid, Link2, Moon, Sparkles, Sun, Zap } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const CV_ICON_SRC = "/download-cv-icon.png";
+const HERO_WORD_INTERVAL = 420;
+const HERO_WORD_INTERVAL_FAST = 140;
 
 export type HomeClientProps = {
   content: SiteContent;
@@ -37,19 +39,11 @@ const sectionEnterMs = 1.12;
 
 const sectionScrollOffset = 112;
 
-const navPillTransition = {
-  type: "tween" as const,
-  duration: 0.72,
-  ease: cinematicEase,
-};
-
-const navColorTransition = {
-  duration: 0.48,
-  ease: cinematicEase,
-};
+const navPillSpring = { stiffness: 220, damping: 30, mass: 0.9 };
 
 const heroDissolveShow = {
   opacity: 1,
+  visibility: "visible" as const,
   filter: "blur(0px) brightness(1) saturate(1)",
   scale: 1,
   y: 0,
@@ -57,15 +51,37 @@ const heroDissolveShow = {
 
 const heroDissolveHide = {
   opacity: 0,
-  filter: "blur(20px) brightness(1.18) saturate(0.75)",
-  scale: 1.05,
-  y: -18,
+  visibility: "hidden" as const,
+  filter: "blur(12px) brightness(1.12) saturate(0.85)",
+  scale: 1.02,
+  y: -10,
 };
 
-function heroDissolveTransition(reduced: boolean, mobile: boolean) {
-  return reduced
-    ? { duration: 0.28, ease: "easeOut" as const }
-    : { duration: mobile ? 0.95 : 0.82, ease: cinematicEase };
+function heroDissolveTransition(reduced: boolean, mobile: boolean, visible: boolean) {
+  if (reduced) return { duration: 0.15, ease: "easeOut" as const };
+  if (!visible) return { duration: mobile ? 0.22 : 0.18, ease: cinematicEase };
+  return { duration: mobile ? 0.58 : 0.48, ease: cinematicEase };
+}
+
+function shouldShowHeroOverlay(
+  scrollY: number,
+  innerHeight: number,
+  isMobile: boolean,
+  heroBottom: number,
+): boolean {
+  const summaryBio = document.getElementById("summary-bio");
+  if (!summaryBio) return scrollY < innerHeight * 0.85;
+
+  const summaryTop = summaryBio.getBoundingClientRect().top;
+  const anchorLine = isMobile ? sectionScrollOffset + 16 : sectionScrollOffset + 32;
+  const overlapPad = isMobile ? 10 : 14;
+  /** Hide at Summary anchor or before hero footprint overlaps section — whichever comes first. */
+  const hideLine = Math.max(anchorLine, heroBottom + overlapPad);
+  const showLine = hideLine + (isMobile ? 80 : 104);
+
+  if (summaryTop <= hideLine) return false;
+  if (summaryTop >= showLine || scrollY <= 8) return true;
+  return true;
 }
 
 const navItems = [
@@ -94,9 +110,72 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [bgBlurActive, setBgBlurActive] = useState(false);
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
+  const [contentElevated, setContentElevated] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const scrollLockRef = useRef(false);
   const cancelScrollRef = useRef<(() => void) | null>(null);
+  const heroOverlayRef = useRef<HTMLDivElement>(null);
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const navButtonRefs = useRef<Partial<Record<(typeof navItems)[number]["id"], HTMLButtonElement>>>({});
+  const navPillReadyRef = useRef(false);
+  const [navPillReady, setNavPillReady] = useState(false);
+  const [showreelHover, setShowreelHover] = useState(false);
+  const scrollSpyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pillLeft = useSpring(0, navPillSpring);
+  const pillWidth = useSpring(48, navPillSpring);
+
+  const syncNavPill = useCallback(() => {
+    const container = navScrollRef.current;
+    const button = navButtonRefs.current[activeTab];
+    if (!container || !button) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    const left = buttonRect.left - containerRect.left + container.scrollLeft;
+    const width = buttonRect.width;
+
+    if (!navPillReadyRef.current) {
+      pillLeft.jump(left);
+      pillWidth.jump(width);
+      navPillReadyRef.current = true;
+      setNavPillReady(true);
+      return;
+    }
+
+    pillLeft.set(left);
+    pillWidth.set(width);
+  }, [activeTab, pillLeft, pillWidth]);
+
+  useLayoutEffect(() => {
+    syncNavPill();
+
+    const container = navScrollRef.current;
+    const button = navButtonRefs.current[activeTab];
+
+    if (navPillReadyRef.current && button) {
+      button.scrollIntoView({
+        behavior: "auto",
+        inline: "center",
+        block: "nearest",
+      });
+    }
+
+    requestAnimationFrame(syncNavPill);
+
+    if (!container) return;
+
+    const onNavScroll = () => syncNavPill();
+    container.addEventListener("scroll", onNavScroll, { passive: true });
+    const ro = new ResizeObserver(() => syncNavPill());
+    ro.observe(container);
+    window.addEventListener("resize", syncNavPill);
+
+    return () => {
+      container.removeEventListener("scroll", onNavScroll);
+      ro.disconnect();
+      window.removeEventListener("resize", syncNavPill);
+    };
+  }, [activeTab, navReducedMotion, syncNavPill]);
 
   const highlightedEdits: HighlightEditItem[] = useMemo(
     () =>
@@ -165,25 +244,9 @@ export default function HomeClient({ content }: HomeClientProps) {
     ? "border border-white/20 bg-zinc-950/30 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl backdrop-saturate-150"
     : "border border-white/55 bg-white/28 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-150";
   const dockPillClass = isDark
-    ? "bg-white/14 shadow-[inset_0_1px_1px_rgba(255,255,255,0.22)] ring-1 ring-white/12 backdrop-blur-md"
-    : "bg-white/52 shadow-[inset_0_1px_1px_rgba(255,255,255,0.85)] ring-1 ring-white/70 backdrop-blur-md";
-  /** Inactive dock labels: stronger on home hero where the bar sits over a busy background. */
-  const inactiveNavColor =
-    activeTab === "home"
-      ? isDark
-        ? "rgba(228,228,231,0.92)"
-        : "rgba(63,63,70,0.94)"
-      : isDark
-        ? "rgba(161,161,170,0.95)"
-        : "rgba(82,82,91,0.95)";
-  const inactiveNavClass =
-    activeTab === "home"
-      ? isDark
-        ? "text-zinc-200/90 transition-colors duration-200 hover:text-white"
-        : "text-zinc-700/90 transition-colors duration-200 hover:text-zinc-900"
-      : isDark
-        ? "text-zinc-400 transition-colors duration-200 hover:text-zinc-200"
-        : "text-zinc-600 transition-colors duration-200 hover:text-zinc-900";
+    ? "bg-white/28 shadow-[inset_0_1px_1px_rgba(255,255,255,0.28)] ring-1 ring-white/20 backdrop-blur-md"
+    : "bg-white/72 shadow-[inset_0_1px_1px_rgba(255,255,255,0.92)] ring-1 ring-white/80 backdrop-blur-md";
+  const inactiveDockClass = isDark ? "dock-nav-inactive-dark" : "dock-nav-inactive-light";
   const dockActiveGlowClass = isDark
     ? "shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_26px_12px_rgba(253,224,71,0.22),0_0_52px_20px_rgba(249,115,22,0.12)]"
     : "shadow-[0_0_0_1px_rgba(251,146,60,0.35),0_0_22px_10px_rgba(251,191,36,0.32),0_0_44px_18px_rgba(234,88,12,0.14)]";
@@ -222,14 +285,11 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       const isMobile = window.innerWidth < 768;
       const summaryRevealThreshold = isMobile ? 0.38 : 0.68;
-      const heroScrollLimit = isMobile ? 0.96 : 0.88;
       const referenceY = scrollY + innerHeight * 0.28;
       const summaryBio = document.getElementById("summary-bio");
       const summaryInView = summaryBio
         ? summaryBio.getBoundingClientRect().top < innerHeight * summaryRevealThreshold
         : scrollY > innerHeight * (isMobile ? 0.35 : 0.22);
-
-      setHeroOverlayVisible(!summaryInView && scrollY < innerHeight * heroScrollLimit);
 
       let next: (typeof navItems)[number]["id"] = "home";
 
@@ -255,7 +315,9 @@ export default function HomeClient({ content }: HomeClientProps) {
       scrollTick = true;
       requestAnimationFrame(() => {
         scrollTick = false;
-        updateActiveSection();
+        if (scrollLockRef.current) return;
+        if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
+        scrollSpyTimerRef.current = setTimeout(updateActiveSection, 90);
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -263,6 +325,42 @@ export default function HomeClient({ content }: HomeClientProps) {
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", updateActiveSection);
+      if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
+    };
+  }, [isMounted]);
+
+  /** Hero overlay: update every scroll frame (no debounce) so fast scroll hides immediately. */
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const updateHeroOverlay = () => {
+      if (scrollLockRef.current) return;
+      const { scrollY, innerHeight } = window;
+      const isMobile = window.innerWidth < 768;
+      const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
+      const summaryTop = document.getElementById("summary-bio")?.getBoundingClientRect().top ?? innerHeight;
+      const nextVisible = shouldShowHeroOverlay(scrollY, innerHeight, isMobile, heroBottom);
+      const elevated = summaryTop <= heroBottom + 24 || scrollY > 56;
+      setContentElevated((prev) => (prev === elevated ? prev : elevated));
+      setHeroOverlayVisible((prev) => (prev === nextVisible ? prev : nextVisible));
+    };
+
+    updateHeroOverlay();
+    let heroTick = false;
+    const onScrollHero = () => {
+      if (heroTick) return;
+      heroTick = true;
+      requestAnimationFrame(() => {
+        heroTick = false;
+        updateHeroOverlay();
+      });
+    };
+
+    window.addEventListener("scroll", onScrollHero, { passive: true });
+    window.addEventListener("resize", updateHeroOverlay);
+    return () => {
+      window.removeEventListener("scroll", onScrollHero);
+      window.removeEventListener("resize", updateHeroOverlay);
     };
   }, [isMounted]);
 
@@ -303,6 +401,7 @@ export default function HomeClient({ content }: HomeClientProps) {
     scrollLockRef.current = true;
     setActiveTab(id);
     setHeroOverlayVisible(id === "home");
+    setContentElevated(id !== "home");
 
     if (navReducedMotion) {
       const targetY = section.getBoundingClientRect().top + window.scrollY - sectionScrollOffset;
@@ -317,6 +416,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         scrollLockRef.current = false;
         cancelScrollRef.current = null;
         setHeroOverlayVisible(id === "home");
+        setContentElevated(id !== "home");
       },
     });
   }, [navReducedMotion]);
@@ -445,12 +545,14 @@ export default function HomeClient({ content }: HomeClientProps) {
       />
 
       <motion.div
+        ref={heroOverlayRef}
+        data-hero-overlay
         aria-hidden={!heroOverlayVisible}
         initial={false}
         animate={heroOverlayVisible ? heroDissolveShow : heroDissolveHide}
-        transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView)}
+        transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
         style={{ transformOrigin: "top right" }}
-        className="pointer-events-none fixed inset-x-0 top-0 z-[15] flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)]"
+        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${contentElevated ? "z-[8]" : "z-[15]"}`}
       >
         <motion.div
           aria-hidden
@@ -463,8 +565,10 @@ export default function HomeClient({ content }: HomeClientProps) {
           }
           transition={
             navReducedMotion
-              ? { duration: 0.2 }
-              : { duration: isMobileView ? 0.95 : 0.82, ease: cinematicEase, times: [0, 0.42, 1] }
+              ? { duration: 0.15 }
+              : heroOverlayVisible
+                ? { duration: 0.2 }
+                : { duration: 0.28, ease: cinematicEase, times: [0, 0.35, 1] }
           }
           style={{
             background:
@@ -481,10 +585,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                   ? heroDissolveShow
                   : { ...heroDissolveHide, y: -14 }
             }
-            transition={{
-              ...heroDissolveTransition(Boolean(navReducedMotion), isMobileView),
-              delay: !navReducedMotion && !heroOverlayVisible ? 0.07 : 0,
-            }}
+            transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
             style={{ transformOrigin: "top right" }}
           >
             <Image
@@ -510,43 +611,46 @@ export default function HomeClient({ content }: HomeClientProps) {
                     ? heroDissolveShow
                     : { ...heroDissolveHide, y: -22, filter: "blur(22px) brightness(1.22) saturate(0.65)" }
               }
-              transition={{
-                ...heroDissolveTransition(Boolean(navReducedMotion), isMobileView),
-                delay: !navReducedMotion && heroOverlayVisible ? 0.06 : 0,
-              }}
+              transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
               style={{ transformOrigin: "top right" }}
-              className="text-[clamp(0.8125rem,2.8vw,0.975rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
+              className="ml-auto w-fit max-w-full text-[clamp(0.8125rem,2.8vw,0.975rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
             >
-              <motion.span
-                className="inline-flex min-h-[1.2em] w-full flex-nowrap items-center justify-end gap-x-1 whitespace-nowrap text-right md:min-h-[1.3em] md:gap-x-1.5"
-                variants={heroTaglineVariants}
-                initial="hidden"
-                animate="visible"
-              >
-                <span className="shrink-0 leading-none">{content.hero.linePrefix}</span>
-                <TextLoop
-                  interval={420}
-                  stableSlot
-                  className="min-h-[1.2em] w-[9ch] text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
+              <div className="flex w-fit max-w-full flex-col items-center">
+                <motion.span
+                  className="inline-flex min-h-[1.2em] w-fit max-w-full flex-nowrap items-center gap-x-1 whitespace-nowrap md:min-h-[1.3em] md:gap-x-1.5"
+                  variants={heroTaglineVariants}
+                  initial="hidden"
+                  animate="visible"
                 >
-                  {content.hero.rotatingWords.map((word) => (
-                    <span key={word}>{word}</span>
-                  ))}
-                </TextLoop>
-                <span className="shrink-0 leading-none">{content.hero.lineSuffix}</span>
-              </motion.span>
-            </motion.div>
+                  <span className="shrink-0 leading-none">{content.hero.linePrefix}</span>
+                  <TextLoop
+                    interval={showreelHover ? HERO_WORD_INTERVAL_FAST : HERO_WORD_INTERVAL}
+                    accelerated={showreelHover}
+                    stableSlot
+                    className="min-h-[1.2em] w-[9ch] shrink-0 text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
+                  >
+                    {content.hero.rotatingWords.map((word) => (
+                      <span key={word}>{word}</span>
+                    ))}
+                  </TextLoop>
+                  <span className="shrink-0 leading-none">{content.hero.lineSuffix}</span>
+                </motion.span>
 
-            <HeroCta
-              label={content.hero.cta?.label ?? "Watch showreel"}
-              href={content.hero.cta?.href ?? ""}
-              visible={heroOverlayVisible}
-            />
+                <div className="mt-5 max-md:translate-x-[52px] md:mt-9 md:translate-x-[30px]">
+                  <HeroCta
+                    label={content.hero.cta?.label ?? "Watch showreel"}
+                    href={content.hero.cta?.href ?? ""}
+                    visible={heroOverlayVisible}
+                    onHoverChange={setShowreelHover}
+                  />
+                </div>
+              </div>
+            </motion.div>
           </div>
         </div>
       </motion.div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10">
+      <div className={`relative mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
         <motion.section
           id="summary"
           initial="hidden"
@@ -651,10 +755,8 @@ export default function HomeClient({ content }: HomeClientProps) {
         sectionTitleClass={sectionHeadingClass}
       />
 
-      <nav className="fixed bottom-8 left-1/2 z-[70] max-w-[calc(100vw-1.5rem)] -translate-x-1/2">
-        <div
-          className={`relative flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto rounded-full px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${dockShellClass}`}
-        >
+      <nav className="fixed bottom-[max(2rem,env(safe-area-inset-bottom))] left-1/2 z-[70] max-w-[calc(100vw-1.5rem)] -translate-x-1/2">
+        <div className={`relative overflow-hidden rounded-full ${dockShellClass}`}>
           <div
             aria-hidden
             className={`pointer-events-none absolute inset-0 rounded-full ${
@@ -663,71 +765,57 @@ export default function HomeClient({ content }: HomeClientProps) {
                 : "bg-gradient-to-b from-white/45 to-white/10"
             }`}
           />
-          <LayoutGroup id="floating-dock">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
+          {!navReducedMotion && navPillReady ? (
+            <>
+              <motion.div
+                aria-hidden
+                className={`pointer-events-none absolute top-2.5 bottom-2.5 z-0 rounded-full bg-transparent ${dockActiveGlowClass}`}
+                style={{ left: pillLeft, width: pillWidth }}
+              />
+              <motion.div
+                aria-hidden
+                className={`pointer-events-none absolute top-2.5 bottom-2.5 z-[1] rounded-full ${dockPillClass}`}
+                style={{ left: pillLeft, width: pillWidth }}
+              />
+            </>
+          ) : null}
+          <div
+            ref={navScrollRef}
+            className="relative z-[2] flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          >
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleNavClick(item.id)}
-                  className={`relative isolate shrink-0 overflow-visible rounded-full px-3 py-2 text-xs font-medium md:px-4 ${
-                    isActive ? "" : inactiveNavClass
+            return (
+              <button
+                key={item.id}
+                ref={(node) => {
+                  if (node) navButtonRefs.current[item.id] = node;
+                  else delete navButtonRefs.current[item.id];
+                }}
+                type="button"
+                onClick={() => handleNavClick(item.id)}
+                className={`relative z-[2] isolate shrink-0 overflow-visible rounded-full px-3 py-2 text-xs transition-colors duration-200 md:px-4 ${
+                  isActive && navReducedMotion ? dockPillClass : ""
+                } ${isActive ? "dock-nav-active" : inactiveDockClass}`}
+              >
+                <span
+                  className={`relative z-10 flex items-center justify-center gap-1.5 ${
+                    !isActive && activeTab === "home"
+                      ? isDark
+                        ? "drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]"
+                        : "drop-shadow-[0_1px_2px_rgba(255,255,255,0.65)]"
+                      : ""
                   }`}
                 >
-                  <AnimatePresence initial={false}>
-                    {isActive ? (
-                      <>
-                        <motion.div
-                          key="nav-active-glow"
-                          aria-hidden
-                          layout={false}
-                          initial={navReducedMotion ? { opacity: 1 } : { opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={navReducedMotion ? { opacity: 0 } : { opacity: 0 }}
-                          transition={
-                            navReducedMotion
-                              ? { duration: 0.2, ease: "easeOut" }
-                              : { duration: 0.42, ease: cinematicEase }
-                          }
-                          className={`pointer-events-none absolute inset-[-7px] z-0 rounded-full bg-transparent ${dockActiveGlowClass}`}
-                        />
-                        <motion.div
-                          key="nav-pill-surface"
-                          layoutId={navReducedMotion ? undefined : "nav-pill"}
-                          initial={navReducedMotion ? { opacity: 0 } : false}
-                          animate={{ opacity: 1 }}
-                          exit={navReducedMotion ? { opacity: 0 } : undefined}
-                          transition={
-                            navReducedMotion ? { duration: 0.2, ease: "easeOut" } : navPillTransition
-                          }
-                          className={`absolute inset-0 z-[1] rounded-full ${dockPillClass}`}
-                        />
-                      </>
-                    ) : null}
-                  </AnimatePresence>
-                  <motion.span
-                    className={`relative z-10 flex items-center justify-center gap-1.5 ${
-                      !isActive && activeTab === "home" ? "drop-shadow-[0_1px_2px_rgba(0,0,0,0.28)]" : ""
-                    }`}
-                    animate={{
-                      color: isActive
-                        ? isDark
-                          ? "rgba(255,255,255,1)"
-                          : "rgba(24,24,27,1)"
-                        : inactiveNavColor,
-                    }}
-                    transition={navReducedMotion ? { duration: 0.2, ease: "easeOut" } : navColorTransition}
-                  >
-                    <Icon size={14} strokeWidth={2} className="shrink-0" />
-                    <span className="hidden sm:inline">{item.label}</span>
-                  </motion.span>
-                </button>
-              );
-            })}
-          </LayoutGroup>
+                  <Icon size={14} strokeWidth={isActive ? 2.25 : 2} className="shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">{item.label}</span>
+                </span>
+              </button>
+            );
+          })}
+          </div>
         </div>
       </nav>
     </motion.main>

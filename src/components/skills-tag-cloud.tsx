@@ -35,20 +35,23 @@ function distToRect(px: number, py: number, r: DOMRect) {
 
 function SkillCardTitle({ block, isDark }: { block: SkillBlock; isDark: boolean }) {
   const base =
-    "min-w-0 w-full text-[0.7rem] font-extrabold uppercase leading-snug tracking-[0.18em] hyphens-none [overflow-wrap:anywhere] sm:flex-1 md:text-xs md:tracking-[0.2em] " +
+    "min-w-0 w-full font-sans text-[0.9375rem] font-bold leading-snug tracking-[0.06em] hyphens-none [overflow-wrap:anywhere] sm:text-base md:text-[1.0625rem] md:leading-tight " +
     (isDark ? "text-white title-glow-opposite-light-text" : "text-zinc-950 title-glow-opposite-dark-text");
 
-  if (block.num === "01") {
+  const commaIdx = block.title.indexOf(",");
+  if (commaIdx > 0 && commaIdx < block.title.length - 1) {
+    const lead = block.title.slice(0, commaIdx + 1);
+    const tail = block.title.slice(commaIdx + 1).trim();
     return (
       <h3 className={base}>
-        <span className="text-balance">Video Editing,</span>{" "}
-        <span className="whitespace-nowrap">Motion &amp; Sound</span>
+        <span className="block text-balance uppercase">{lead}</span>
+        {tail ? <span className="mt-0.5 block text-balance uppercase">{tail}</span> : null}
       </h3>
     );
   }
 
   return (
-    <h3 className={`${base} text-balance`}>{block.title}</h3>
+    <h3 className={`${base} text-balance uppercase`}>{block.title}</h3>
   );
 }
 
@@ -261,27 +264,37 @@ export function SkillsTagCloud({
       >
         {blocks.map((block, i) => (
           <StickyNote key={block.num} index={i} reduced={Boolean(reduced)} isDark={isDark}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-3 md:gap-4">
+            <header
+              className={`border-b pb-4 ${
+                isDark ? "border-white/10" : "border-zinc-200/90"
+              }`}
+            >
               <span
-                className={`shrink-0 select-none font-mono text-[2.1rem] font-semibold leading-none tabular-nums tracking-[-0.04em] md:text-[2.5rem] md:font-bold md:tracking-[-0.05em] ${
-                  isDark ? "text-white/25" : "text-zinc-900/75"
+                className={`mb-2 block select-none font-mono text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.04em] md:text-[2rem] ${
+                  isDark ? "text-white/20" : "text-zinc-900/55"
                 }`}
                 aria-hidden
               >
                 {block.num}
               </span>
               <SkillCardTitle block={block} isDark={isDark} />
-            </div>
+            </header>
 
-            <ul className="mt-5 space-y-2.5 md:mt-6 md:space-y-3" role="list">
+            <ul className="mt-4 space-y-2 md:mt-5 md:space-y-2.5" role="list">
               {block.tags.map((tag) => {
                 const rim = rimByLabel[tag] ?? 0;
                 return (
                   <li key={tag} className="list-none">
-                    <div ref={bindTagRef(tag)}>
+                    <div ref={bindTagRef(tag)} className="flex items-start gap-2.5">
                       <span
-                        className={`group relative inline-block cursor-default px-0.5 font-mono text-[0.8125rem] font-semibold tracking-[-0.02em] transition-colors duration-200 md:text-[0.9375rem] md:font-bold md:tracking-tight ${
-                          isDark ? "text-zinc-300" : "text-zinc-800"
+                        className={`mt-[0.55em] h-1 w-1 shrink-0 rounded-full ${
+                          isDark ? "bg-white/35" : "bg-zinc-400/80"
+                        }`}
+                        aria-hidden
+                      />
+                      <span
+                        className={`group relative inline-block min-w-0 flex-1 cursor-default font-mono text-[0.75rem] font-medium leading-relaxed tracking-[-0.01em] transition-colors duration-200 md:text-[0.8125rem] ${
+                          isDark ? "text-zinc-400" : "text-zinc-600"
                         }`}
                         style={{
                           textShadow:

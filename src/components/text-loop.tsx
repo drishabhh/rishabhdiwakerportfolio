@@ -5,6 +5,22 @@ import { Children, useEffect, useState, type ReactNode } from "react";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
+const wordEnterShake = {
+  normal: {
+    x: [0, -1.2, 1.2, -0.6, 0.6, 0] as number[],
+    y: [0, 0.6, -0.6, 0.35, -0.35, 0] as number[],
+    rotate: [0, -0.6, 0.6, -0.35, 0.35, 0] as number[],
+    duration: 0.09,
+  },
+  accelerated: {
+    x: [0, -4, 4, -3.5, 3.5, -2, 2, 0] as number[],
+    y: [0, 2, -2, 1.5, -1.5, 1, -1, 0] as number[],
+    rotate: [0, -2.5, 2.5, -2, 2, -1, 1, 0] as number[],
+    scale: [0.94, 1.04, 0.98, 1.02, 1] as number[],
+    duration: 0.11,
+  },
+} as const;
+
 /** Fonts rotate as words rotate (no repeated word holds). */
 const TRANSITION_FONT_VARS = [
   "var(--font-syne)",
@@ -41,6 +57,8 @@ export type TextLoopProps = {
   stableSlot?: boolean;
   /** Cycle display fonts each step (on by default). */
   rotateFonts?: boolean;
+  /** Snappier word transitions (e.g. when CTA is hovered). */
+  accelerated?: boolean;
 };
 
 /**
@@ -52,6 +70,7 @@ export function TextLoop({
   className = "",
   stableSlot = false,
   rotateFonts,
+  accelerated = false,
 }: TextLoopProps) {
   const items = Children.toArray(children).filter(Boolean);
   const [stepIndex, setStepIndex] = useState(0);
@@ -73,8 +92,9 @@ export function TextLoop({
   const fontFamily = useRotatingFonts ? fontVarForIndex(f) : undefined;
   const motionKey = useRotatingFonts ? `${w}-${f}` : `${w}`;
 
-  const enterOpacity = 0.055;
-  const enterBlur = 0.06;
+  const enterOpacity = accelerated ? 0.028 : 0.055;
+  const enterBlur = accelerated ? 0.032 : 0.06;
+  const shake = accelerated ? wordEnterShake.accelerated : wordEnterShake.normal;
 
   if (items.length === 0) {
     return null;
@@ -93,19 +113,34 @@ export function TextLoop({
   const wordNode = (
     <motion.span
       key={motionKey}
-      initial={{ opacity: 0, filter: "blur(5px)" }}
+      initial={{
+        opacity: 0,
+        filter: "blur(5px)",
+        x: 0,
+        y: 0,
+        rotate: 0,
+        scale: accelerated ? 0.94 : 1,
+      }}
       animate={{
         opacity: 1,
         filter: "blur(0px)",
+        x: shake.x,
+        y: shake.y,
+        rotate: shake.rotate,
+        scale: accelerated ? wordEnterShake.accelerated.scale : 1,
       }}
       transition={{
         opacity: { duration: enterOpacity, ease: cinematicEase },
         filter: { duration: enterBlur, ease: cinematicEase },
+        x: { duration: shake.duration, ease: "easeOut" },
+        y: { duration: shake.duration, ease: "easeOut" },
+        rotate: { duration: shake.duration, ease: "easeOut" },
+        scale: { duration: shake.duration, ease: cinematicEase },
       }}
       className={
         stableSlot
-          ? "absolute inset-0 flex items-center justify-center leading-none will-change-[opacity,filter]"
-          : "inline-block w-full text-center will-change-[opacity,filter]"
+          ? "absolute inset-0 flex items-center justify-center leading-none will-change-[opacity,filter,transform]"
+          : "inline-block w-full text-center will-change-[opacity,filter,transform]"
       }
       style={fontFamily ? { fontFamily } : undefined}
     >

@@ -21,6 +21,36 @@
   text-shadow: var(--title-glow-opposite-dark-text);
 }
 
+.dock-nav-active {
+  position: relative;
+  z-index: 2;
+  color: #09090b !important;
+  font-weight: 600;
+}
+
+.dock-nav-active svg {
+  color: #09090b !important;
+  stroke: #09090b !important;
+}
+
+.dock-nav-inactive-dark {
+  color: rgba(244, 244, 245, 0.96) !important;
+}
+
+.dock-nav-inactive-dark svg {
+  color: rgba(244, 244, 245, 0.96) !important;
+  stroke: rgba(244, 244, 245, 0.96) !important;
+}
+
+.dock-nav-inactive-light {
+  color: rgba(39, 39, 42, 0.96) !important;
+}
+
+.dock-nav-inactive-light svg {
+  color: rgba(39, 39, 42, 0.96) !important;
+  stroke: rgba(39, 39, 42, 0.96) !important;
+}
+
 /* Hero TextLoop fonts: `--font-syne`, `--font-space-mono`, etc. (see layout). */
 
 * {

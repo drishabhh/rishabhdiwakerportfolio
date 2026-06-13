@@ -12,7 +12,7 @@ import type {
 } from "@/lib/content-types";
 import { originalHighlightItems } from "@/lib/original-highlights";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type SectionId =
   | "header"
@@ -49,12 +49,16 @@ function Field({
   onChange,
   multiline,
   hint,
+  onBlur,
+  onFocus,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   multiline?: boolean;
   hint?: string;
+  onBlur?: () => void;
+  onFocus?: () => void;
 }) {
   const inputClass =
     "mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-base text-white placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50 sm:text-sm";
@@ -63,11 +67,80 @@ function Field({
       <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">{label}</span>
       {hint ? <p className="mt-0.5 text-xs text-zinc-500">{hint}</p> : null}
       {multiline ? (
-        <textarea rows={4} className={inputClass} value={value} onChange={(e) => onChange(e.target.value)} />
+        <textarea
+          rows={4}
+          className={inputClass}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          onFocus={onFocus}
+        />
       ) : (
-        <input type="text" className={inputClass} value={value} onChange={(e) => onChange(e.target.value)} />
+        <input
+          type="text"
+          className={inputClass}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          onFocus={onFocus}
+        />
       )}
     </label>
+  );
+}
+
+function parseCommaSeparated(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/** Keeps raw text while focused so trailing commas/spaces are not stripped on each keystroke. */
+function CommaSeparatedField({
+  label,
+  items,
+  onChange,
+  hint,
+}: {
+  label: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+  hint?: string;
+}) {
+  const [raw, setRaw] = useState(() => items.join(", "));
+  const focusedRef = useRef(false);
+  const itemsKey = items.join("\0");
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setRaw(items.join(", "));
+    }
+  }, [itemsKey, items]);
+
+  const normalize = useCallback(() => {
+    const parsed = parseCommaSeparated(raw);
+    onChange(parsed);
+    setRaw(parsed.join(", "));
+  }, [raw, onChange]);
+
+  return (
+    <Field
+      label={label}
+      hint={hint}
+      value={raw}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onChange={(v) => {
+        setRaw(v);
+        onChange(parseCommaSeparated(v));
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        normalize();
+      }}
+    />
   );
 }
 
@@ -148,6 +221,8 @@ export default function AdminPage() {
 
   const save = async () => {
     if (!content) return;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     setSaving(true);
     setMessage("");
     const res = await fetch("/api/content", {
@@ -471,13 +546,13 @@ export default function AdminPage() {
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Hero tagline</h2>
               <Field label="Prefix" value={content.hero.linePrefix} onChange={(v) => setContent({ ...content, hero: { ...content.hero, linePrefix: v } })} />
-              <Field
+              <CommaSeparatedField
                 label="Rotating words (comma-separated)"
-                value={content.hero.rotatingWords.join(", ")}
-                onChange={(v) =>
+                items={content.hero.rotatingWords}
+                onChange={(rotatingWords) =>
                   setContent({
                     ...content,
-                    hero: { ...content.hero, rotatingWords: v.split(",").map((w) => w.trim()).filter(Boolean) },
+                    hero: { ...content.hero, rotatingWords },
                   })
                 }
                 hint="Words that cycle in the hero line"
@@ -644,10 +719,10 @@ export default function AdminPage() {
                 <div key={block.num} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <Field label="Block number" value={block.num} onChange={(v) => updateSkillBlock(i, { num: v })} />
                   <Field label="Title" value={block.title} onChange={(v) => updateSkillBlock(i, { title: v })} />
-                  <Field
+                  <CommaSeparatedField
                     label="Tags (comma-separated)"
-                    value={block.tags.join(", ")}
-                    onChange={(v) => updateSkillBlock(i, { tags: v.split(",").map((t) => t.trim()).filter(Boolean) })}
+                    items={block.tags}
+                    onChange={(tags) => updateSkillBlock(i, { tags })}
                   />
                 </div>
               ))}

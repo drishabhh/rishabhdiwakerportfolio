@@ -36,7 +36,7 @@ export function smoothScrollToY(
   }
 
   const resolvedDuration =
-    duration ?? Math.min(1400, Math.max(720, Math.abs(distance) * 0.62));
+    duration ?? Math.min(1800, Math.max(880, Math.abs(distance) * 0.52));
   const startTime = performance.now();
   let frameId = 0;
   let cancelled = false;
