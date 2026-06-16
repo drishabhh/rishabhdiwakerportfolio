@@ -193,6 +193,36 @@ export const defaultContent: SiteContent = {
 };
 
 const contentPath = path.join(process.cwd(), "data", "content.json");
+const localContentPath = path.join(process.cwd(), "data", "content.local.json");
+
+/** Local dev saves go to content.local.json (gitignored), not the committed seed file. */
+function useLocalContentFile(): boolean {
+  return process.env.NODE_ENV === "development" && process.env.VERCEL !== "1";
+}
+
+async function readContentFromDisk(): Promise<SiteContent | null> {
+  if (useLocalContentFile()) {
+    try {
+      const raw = await readFile(localContentPath, "utf-8");
+      return mergeContent(JSON.parse(raw) as Partial<SiteContent>);
+    } catch {
+      /* fall through to committed seed */
+    }
+  }
+
+  try {
+    const raw = await readFile(contentPath, "utf-8");
+    return mergeContent(JSON.parse(raw) as Partial<SiteContent>);
+  } catch {
+    return null;
+  }
+}
+
+async function writeContentToDisk(json: string): Promise<void> {
+  const target = useLocalContentFile() ? localContentPath : contentPath;
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, json, "utf-8");
+}
 
 export async function readContent(): Promise<SiteContent> {
   if (hasBlobStorage()) {
@@ -218,11 +248,13 @@ export async function readContent(): Promise<SiteContent> {
   }
 
   try {
-    const raw = await readFile(contentPath, "utf-8");
-    return mergeContent(JSON.parse(raw) as Partial<SiteContent>);
+    const fromDisk = await readContentFromDisk();
+    if (fromDisk) return fromDisk;
   } catch {
-    return defaultContent;
+    /* fall through */
   }
+
+  return defaultContent;
 }
 
 export async function writeContent(content: SiteContent): Promise<void> {
@@ -243,8 +275,7 @@ export async function writeContent(content: SiteContent): Promise<void> {
   }
 
   try {
-    await mkdir(path.dirname(contentPath), { recursive: true });
-    await writeFile(contentPath, json, "utf-8");
+    await writeContentToDisk(json);
   } catch {
     throw new Error("STORAGE_UNAVAILABLE");
   }

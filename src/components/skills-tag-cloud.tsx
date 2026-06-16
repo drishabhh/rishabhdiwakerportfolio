@@ -9,7 +9,6 @@ const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 const paperSpring = { type: "spring" as const, stiffness: 220, damping: 26, mass: 0.9 };
 
-
 /** Dark / light: match site `cardSurface` — #1A1A1A + white/10 border; light = white + zinc-200. */
 const NOTE_PANEL_DIM_DARK = "border border-white/10 bg-[#1A1A1A]";
 const NOTE_PANEL_HOVER_DARK = "border border-white/[0.16] bg-[#222222]";
