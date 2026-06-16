@@ -15,7 +15,7 @@ import { smoothScrollToElement } from "@/lib/smooth-scroll";
 import { youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
-import { Archive, Briefcase, FileText, House, LayoutGrid, Link2, Moon, Sparkles, Sun, Zap } from "lucide-react";
+import { Archive, Briefcase, FileText, House, LayoutGrid, Link2, Loader2, Moon, Sparkles, Sun, Zap } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const CV_ICON_SRC = "/download-cv-icon.png";
@@ -107,7 +107,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [bgBlurActive, setBgBlurActive] = useState(false);
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
@@ -120,6 +120,9 @@ export default function HomeClient({ content }: HomeClientProps) {
   const navPillReadyRef = useRef(false);
   const [navPillReady, setNavPillReady] = useState(false);
   const [showreelHover, setShowreelHover] = useState(false);
+  const [cvLoading, setCvLoading] = useState(false);
+  const [cvToastVisible, setCvToastVisible] = useState(false);
+  const cvToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollSpyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pillLeft = useSpring(0, navPillSpring);
   const pillWidth = useSpring(48, navPillSpring);
@@ -208,17 +211,15 @@ export default function HomeClient({ content }: HomeClientProps) {
   );
 
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      const savedTheme = window.localStorage.getItem("portfolio-theme");
-      if (savedTheme === "light" || savedTheme === "dark") {
-        setTheme(savedTheme);
-      } else {
-        const hour = new Date().getHours();
-        setTheme(hour >= 6 && hour < 18 ? "light" : "dark");
-      }
-      setIsMounted(true);
-    });
-    return () => cancelAnimationFrame(id);
+    // Always default to light mode on first paint (ignore localStorage/time-of-day).
+    // Users can still toggle manually afterwards.
+    setTheme("light");
+    try {
+      window.localStorage.setItem("portfolio-theme", "light");
+    } catch {
+      /* ignore */
+    }
+    setIsMounted(true);
   }, []);
 
   const isDark = theme === "dark";
@@ -257,6 +258,44 @@ export default function HomeClient({ content }: HomeClientProps) {
       return nextTheme;
     });
   };
+
+  const handleCvDownload = useCallback(async () => {
+    if (cvLoading) return;
+
+    const url = content.resume?.url || "/rishabh-diwaker-cv.pdf";
+    const filename = content.resume?.downloadName || "Rishabh-Diwaker-CV.pdf";
+
+    setCvLoading(true);
+    setCvToastVisible(true);
+
+    if (cvToastTimerRef.current) window.clearTimeout(cvToastTimerRef.current);
+    cvToastTimerRef.current = window.setTimeout(() => {
+      setCvToastVisible(false);
+      setCvLoading(false);
+      cvToastTimerRef.current = null;
+    }, 2000);
+
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.location.assign(url);
+    }
+  }, [content.resume?.downloadName, content.resume?.url, cvLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (cvToastTimerRef.current) window.clearTimeout(cvToastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const syncMobile = () => setIsMobileView(window.innerWidth < 768);
@@ -521,22 +560,44 @@ export default function HomeClient({ content }: HomeClientProps) {
         </div>
       </motion.header>
 
-      <a
-        href={content.resume?.url || "/rishabh-diwaker-cv.pdf"}
-        download={content.resume?.downloadName || "Rishabh-Diwaker-CV.pdf"}
-        aria-label="Download CV"
-        title="Download CV"
-        className="fixed right-4 top-[max(5.25rem,env(safe-area-inset-top))] z-[60] flex h-11 w-11 items-center justify-center rounded-full bg-white p-2 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/10 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-4px_rgba(0,0,0,0.4)] md:right-8 md:top-[max(5.5rem,env(safe-area-inset-top))] md:h-12 md:w-12 md:p-2.5"
+      <div
+        className="fixed right-4 top-[max(5.25rem,env(safe-area-inset-top))] z-[60] md:right-8 md:top-[max(5.5rem,env(safe-area-inset-top))]"
       >
-        <Image
-          src={CV_ICON_SRC}
-          alt=""
-          width={32}
-          height={32}
-          unoptimized
-          className="h-7 w-7 object-contain object-center md:h-8 md:w-8"
-        />
-      </a>
+        {cvToastVisible ? (
+          <motion.div
+            role="status"
+            aria-live="polite"
+            initial={{ opacity: 0, x: 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-none absolute right-full top-1/2 mr-3 -translate-y-1/2 whitespace-nowrap rounded-lg border border-zinc-200/90 bg-white px-3 py-2 text-xs font-medium text-zinc-900 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.2)] ring-1 ring-black/5"
+          >
+            CV downloading starts
+          </motion.div>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => void handleCvDownload()}
+          disabled={cvLoading}
+          aria-label="Download CV"
+          aria-busy={cvLoading}
+          title="Download CV"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white p-2 shadow-[0_8px_24px_-6px_rgba(0,0,0,0.35)] ring-1 ring-black/10 transition-[transform,box-shadow,opacity] duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-4px_rgba(0,0,0,0.4)] disabled:pointer-events-none disabled:opacity-90 md:h-12 md:w-12 md:p-2.5"
+        >
+          {cvLoading ? (
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-800 md:h-7 md:w-7" aria-hidden />
+          ) : (
+            <Image
+              src={CV_ICON_SRC}
+              alt=""
+              width={32}
+              height={32}
+              unoptimized
+              className="h-7 w-7 object-contain object-center md:h-8 md:w-8"
+            />
+          )}
+        </button>
+      </div>
 
       <section
         id="home"

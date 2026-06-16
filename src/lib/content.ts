@@ -196,12 +196,12 @@ const contentPath = path.join(process.cwd(), "data", "content.json");
 const localContentPath = path.join(process.cwd(), "data", "content.local.json");
 
 /** Local dev saves go to content.local.json (gitignored), not the committed seed file. */
-function useLocalContentFile(): boolean {
+function isLocalContentDev(): boolean {
   return process.env.NODE_ENV === "development" && process.env.VERCEL !== "1";
 }
 
 async function readContentFromDisk(): Promise<SiteContent | null> {
-  if (useLocalContentFile()) {
+  if (isLocalContentDev()) {
     try {
       const raw = await readFile(localContentPath, "utf-8");
       return mergeContent(JSON.parse(raw) as Partial<SiteContent>);
@@ -219,7 +219,7 @@ async function readContentFromDisk(): Promise<SiteContent | null> {
 }
 
 async function writeContentToDisk(json: string): Promise<void> {
-  const target = useLocalContentFile() ? localContentPath : contentPath;
+  const target = isLocalContentDev() ? localContentPath : contentPath;
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, json, "utf-8");
 }

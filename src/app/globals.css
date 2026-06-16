@@ -3,7 +3,7 @@
 @custom-variant tall (@media (min-height: 845px));
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   /*
    * Headline halo: glow uses the opposite of the glyph color so type stays legible on busy backgrounds.
    * — Use .title-glow-opposite-light-text when copy is white / light (halo reads dark).
@@ -67,7 +67,7 @@ body {
 
 body {
   font-family: var(--font-inter), sans-serif;
-  color: #f5f5f5;
+  color: #09090b;
 }
 
 a {

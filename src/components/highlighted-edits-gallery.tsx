@@ -2,10 +2,8 @@
 
 import { animate, motion, useMotionValue, useMotionValueEvent, useSpring, useTransform } from "framer-motion";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 
 export type HighlightEditItem = {
   title: string;
@@ -22,16 +20,6 @@ const CARD_WIDTH = 228;
 const STEP = CARD_WIDTH + GAP;
 const GLOW_HALF = 120;
 const FAN_DEG = 1.05;
-const AUTO_SCROLL_DESKTOP = 0.242;
-
-/** Keep translateX in (-cycleLen, 0] so duplicate strips loop seamlessly. */
-function normalizeTrackX(value: number, cycleLen: number): number {
-  if (cycleLen <= 0) return value;
-  let v = value;
-  while (v <= -cycleLen) v += cycleLen;
-  while (v > 0) v -= cycleLen;
-  return v;
-}
 
 type HighlightCardProps = {
   item: HighlightEditItem;
@@ -40,9 +28,8 @@ type HighlightCardProps = {
   total: number;
   isDark: boolean;
   activePhysicalIndex: number;
-  onPlaybackPauseChange?: (cardId: number, pause: boolean) => void;
-  onEmbedLockChange?: (cardId: number, locked: boolean) => void;
-  onCardInteract?: (active: boolean) => void;
+  /** Called when this card locks/unlocks a playing embed (mobile fix). */
+  onLockChange?: (locked: boolean) => void;
 };
 
 const hoverTiltEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -50,13 +37,10 @@ const hoverTiltEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 function youtubePostCommand(iframe: HTMLIFrameElement | null, func: string, args: unknown[] = []) {
   const w = iframe?.contentWindow;
   if (!w) return;
-  w.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+  w.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube.com");
 }
 
-function youtubeEmbedFromUrl(
-  url?: string,
-  opts?: { muted?: boolean; origin?: string },
-): string | undefined {
+function youtubeEmbedFromUrl(url?: string, opts?: { muted?: boolean; origin?: string }): string | undefined {
   if (!url) return undefined;
   try {
     const parsed = new URL(url);
@@ -66,15 +50,14 @@ function youtubeEmbedFromUrl(
       rel: "0",
       modestbranding: "1",
       playsinline: "1",
-      controls: "0",
+      controls: "1",
       autoplay: "1",
-      enablejsapi: "1",
-      cc_load_policy: "0",
-      iv_load_policy: "3",
-      disablekb: "1",
     });
     if (opts?.muted) q.set("mute", "1");
-    if (opts?.origin) q.set("origin", opts.origin);
+    if (opts?.origin) {
+      q.set("enablejsapi", "1");
+      q.set("origin", opts.origin);
+    }
     const start = parsed.searchParams.get("t");
     if (start) q.set("start", start.replace(/[^\d]/g, ""));
     return `https://www.youtube.com/embed/${id}?${q.toString()}`;
@@ -83,204 +66,29 @@ function youtubeEmbedFromUrl(
   }
 }
 
-function runYoutubeCommandWhenReady(
-  iframe: HTMLIFrameElement | null,
-  func: string,
-  args: unknown[] = [],
-) {
-  if (!iframe) return;
-  youtubePostCommand(iframe, func, args);
-  window.setTimeout(() => youtubePostCommand(iframe, func, args), 180);
-  window.setTimeout(() => youtubePostCommand(iframe, func, args), 520);
-}
-
-type HighlightVideoPlayerProps = {
-  item: HighlightEditItem;
-  embedSrc: string;
-  iframeRef: React.RefObject<HTMLIFrameElement | null>;
-  videoPaused: boolean;
-  playerMuted: boolean;
-  onTogglePause: () => void;
-  onToggleMute: () => void;
-  onClose: () => void;
-  onExpand?: () => void;
-  onMinimize?: () => void;
-  showExpand?: boolean;
-  showMinimize?: boolean;
-  shellClassName?: string;
-};
-
-function HighlightVideoPlayer({
-  item,
-  embedSrc,
-  iframeRef,
-  videoPaused,
-  playerMuted,
-  onTogglePause,
-  onToggleMute,
-  onClose,
-  onExpand,
-  onMinimize,
-  showExpand = false,
-  showMinimize = false,
-  shellClassName = "absolute inset-0 z-20 touch-none bg-black",
-}: HighlightVideoPlayerProps) {
-  const syncYoutubeAudio = useCallback(() => {
-    runYoutubeCommandWhenReady(iframeRef.current, playerMuted ? "mute" : "unMute");
-  }, [iframeRef, playerMuted]);
-
-  const syncYoutubePlayback = useCallback(
-    (paused: boolean) => {
-      runYoutubeCommandWhenReady(iframeRef.current, paused ? "pauseVideo" : "playVideo");
-    },
-    [iframeRef],
-  );
-
-  return (
-    <div className={shellClassName}>
-      <iframe
-        ref={iframeRef}
-        title={`${item.title} video`}
-        className="pointer-events-none absolute inset-0 h-full w-full border-0"
-        src={embedSrc}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-        onLoad={() => {
-          syncYoutubeAudio();
-          syncYoutubePlayback(videoPaused);
-        }}
-      />
-      <button
-        type="button"
-        className="absolute left-1/2 top-1/2 z-30 inline-flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition hover:bg-black/55 md:h-16 md:w-16"
-        aria-label={videoPaused ? "Play video" : "Pause video"}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePause();
-        }}
-      >
-        {videoPaused ? (
-          <Play className="h-7 w-7 fill-current pl-0.5 md:h-8 md:w-8" aria-hidden />
-        ) : (
-          <Pause className="h-7 w-7 fill-current md:h-8 md:w-8" aria-hidden />
-        )}
-      </button>
-      <button
-        type="button"
-        className="absolute bottom-2 left-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-        aria-label={playerMuted ? "Unmute video" : "Mute video"}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleMute();
-        }}
-      >
-        {playerMuted ? (
-          <VolumeX className="h-4 w-4" aria-hidden />
-        ) : (
-          <Volume2 className="h-4 w-4" aria-hidden />
-        )}
-      </button>
-      {showExpand ? (
-        <button
-          type="button"
-          className="absolute bottom-2 right-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-          aria-label={`Full screen: ${item.title}`}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onExpand?.();
-          }}
-        >
-          <Maximize2 className="h-4 w-4" aria-hidden />
-        </button>
-      ) : null}
-      {showMinimize ? (
-        <button
-          type="button"
-          className="absolute bottom-2 right-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-          aria-label={`Exit full screen: ${item.title}`}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onMinimize?.();
-          }}
-        >
-          <Minimize2 className="h-4 w-4" aria-hidden />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="absolute right-2 top-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-        aria-label={`Close video: ${item.title}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <X className="h-4 w-4" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-function HighlightCard({
-  item,
-  physicalIndex,
-  visualIndex,
-  total,
-  isDark,
-  activePhysicalIndex,
-  onPlaybackPauseChange,
-  onEmbedLockChange,
-  onCardInteract,
-}: HighlightCardProps) {
+function HighlightCard({ item, physicalIndex, visualIndex, total, isDark, activePhysicalIndex, onLockChange }: HighlightCardProps) {
   const sheenX = useSpring(50, { stiffness: 220, damping: 30 });
   const sheenOpacity = useSpring(0, { stiffness: 240, damping: 28 });
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
   const [playing, setPlaying] = useState(false);
   /** True when user opened via the play button — keep iframe interactive and do not stop on hover leave. */
   const [embedLocked, setEmbedLocked] = useState(false);
   const [hoverAutoplayOk, setHoverAutoplayOk] = useState(true);
   const [playerMuted, setPlayerMuted] = useState(true);
-  const [videoPaused, setVideoPaused] = useState(false);
-  const [mobileLayout, setMobileLayout] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
-  const [mobileFullscreen, setMobileFullscreen] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
   const embedOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const embedSrc = playing
-    ? youtubeEmbedFromUrl(item.href, {
-        // Always muted in URL so autoplay works on mobile; unmute via IFrame API on user tap.
-        muted: true,
-        origin: embedOrigin || undefined,
-      })
+    ? youtubeEmbedFromUrl(item.href, { muted: !embedLocked, origin: embedOrigin || undefined })
     : undefined;
 
   const syncYoutubeAudio = useCallback(() => {
-    const iframe = mobileFullscreen ? fullscreenIframeRef.current : iframeRef.current;
-    runYoutubeCommandWhenReady(iframe, playerMuted ? "mute" : "unMute");
-  }, [mobileFullscreen, playerMuted]);
-
-  const syncYoutubePlayback = useCallback(
-    (paused: boolean) => {
-      const iframe = mobileFullscreen ? fullscreenIframeRef.current : iframeRef.current;
-      runYoutubeCommandWhenReady(iframe, paused ? "pauseVideo" : "playVideo");
-    },
-    [mobileFullscreen],
-  );
-
-  const closeVideo = useCallback(() => {
-    setMobileFullscreen(false);
-    setEmbedLocked(false);
-    setPlaying(false);
-    setVideoPaused(false);
-  }, []);
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    if (playerMuted) {
+      youtubePostCommand(iframe, "mute");
+    } else {
+      youtubePostCommand(iframe, "unMute");
+    }
+  }, [playerMuted]);
 
   useEffect(() => {
     const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -291,71 +99,20 @@ function HighlightCard({
   }, []);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const sync = () => setMobileLayout(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mobileFullscreen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [mobileFullscreen]);
-
-  useEffect(() => {
-    if (!embedLocked) setMobileFullscreen(false);
-  }, [embedLocked]);
-
-  useEffect(() => {
     if (!playing) return;
-    setVideoPaused(false);
-    setPlayerMuted(true);
-  }, [playing]);
+    setPlayerMuted(!embedLocked);
+  }, [playing, embedLocked]);
 
+  // Notify gallery when embed locks/unlocks so it can pause scroll & drag on mobile
   useEffect(() => {
-    onPlaybackPauseChange?.(physicalIndex, playing);
-    return () => onPlaybackPauseChange?.(physicalIndex, false);
-  }, [playing, physicalIndex, onPlaybackPauseChange]);
-
-  useEffect(() => {
-    const locked = embedLocked && playing;
-    onEmbedLockChange?.(physicalIndex, locked);
-    return () => onEmbedLockChange?.(physicalIndex, false);
-  }, [embedLocked, playing, physicalIndex, onEmbedLockChange]);
+    onLockChange?.(embedLocked);
+  }, [embedLocked, onLockChange]);
 
   useEffect(() => {
     if (!embedSrc) return;
-    const t1 = window.setTimeout(syncYoutubeAudio, 120);
-    const t2 = window.setTimeout(() => syncYoutubePlayback(false), 160);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [embedSrc, mobileFullscreen, syncYoutubeAudio, syncYoutubePlayback]);
-
-  useEffect(() => {
-    if (!embedSrc) return;
-    syncYoutubeAudio();
-  }, [playerMuted, embedSrc, mobileFullscreen, syncYoutubeAudio]);
-
-  useEffect(() => {
-    if (!embedSrc) return;
-    syncYoutubePlayback(videoPaused);
-  }, [videoPaused, embedSrc, mobileFullscreen, syncYoutubePlayback]);
-
-  const showInlinePlayer = Boolean(embedSrc && !(mobileLayout && mobileFullscreen && embedLocked));
-  const showFullscreenPlayer = Boolean(
-    embedSrc && embedLocked && mobileLayout && mobileFullscreen && portalReady,
-  );
+    const t = window.setTimeout(syncYoutubeAudio, 120);
+    return () => window.clearTimeout(t);
+  }, [embedSrc, syncYoutubeAudio]);
 
   const fan = (visualIndex - (total - 1) / 2) * FAN_DEG;
   const bgPos = useTransform(sheenX, (v) => `${v}% 50%`);
@@ -398,15 +155,8 @@ function HighlightCard({
           sheenX.set(50);
           if (!embedLocked) setPlaying(false);
         }}
-        onPointerDown={(e) => {
-          if (!item.href) return;
-          onCardInteract?.(true);
-          if (embedLocked || embedSrc) e.stopPropagation();
-        }}
-        onPointerUp={() => onCardInteract?.(false)}
-        onPointerCancel={() => onCardInteract?.(false)}
       >
-        <div className={`relative aspect-[9/16] w-full ${item.href ? "cursor-default" : ""}`}>
+        <div className={`relative w-full ${item.href ? "cursor-default" : ""}`} style={{ aspectRatio: "9/16", maxHeight: embedLocked ? "min(75vh, 480px)" : undefined }}>
           {!embedSrc ? (
             <>
               <Image
@@ -414,7 +164,7 @@ function HighlightCard({
                 alt=""
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 64vw, 240px"
+                sizes="(max-width: 768px) 72vw, 280px"
                 unoptimized={Boolean(item.thumbUnoptimized)}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
@@ -429,48 +179,51 @@ function HighlightCard({
                 }}
               />
             </>
-          ) : showInlinePlayer ? (
-            <HighlightVideoPlayer
-              item={item}
-              embedSrc={embedSrc}
-              iframeRef={iframeRef}
-              videoPaused={videoPaused}
-              playerMuted={playerMuted}
-              onTogglePause={() => setVideoPaused((p) => !p)}
-              onToggleMute={() => setPlayerMuted((m) => !m)}
-              onClose={closeVideo}
-              onExpand={() => setMobileFullscreen(true)}
-              showExpand={mobileLayout && embedLocked && !mobileFullscreen}
-            />
-          ) : embedLocked && mobileLayout && mobileFullscreen ? (
-            <div className="absolute inset-0 z-20 bg-black" aria-hidden />
-          ) : null}
-          {showFullscreenPlayer && embedSrc
-            ? createPortal(
-                <div className="fixed inset-0 z-[120] bg-black">
-                  <div className="absolute inset-x-0 top-0 z-40 bg-gradient-to-b from-black/80 to-transparent px-4 pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]">
-                    <p className="line-clamp-2 pr-10 text-sm font-medium text-white">{item.title}</p>
-                    {item.caption ? (
-                      <p className="mt-0.5 line-clamp-2 text-xs text-white/70">{item.caption}</p>
-                    ) : null}
-                  </div>
-                  <HighlightVideoPlayer
-                    item={item}
-                    embedSrc={embedSrc}
-                    iframeRef={fullscreenIframeRef}
-                    videoPaused={videoPaused}
-                    playerMuted={playerMuted}
-                    onTogglePause={() => setVideoPaused((p) => !p)}
-                    onToggleMute={() => setPlayerMuted((m) => !m)}
-                    onClose={closeVideo}
-                    onMinimize={() => setMobileFullscreen(false)}
-                    showMinimize
-                    shellClassName="absolute inset-0 touch-none bg-black"
-                  />
-                </div>,
-                document.body,
-              )
-            : null}
+          ) : (
+            <div className="absolute inset-0 z-20 bg-black pointer-events-auto">
+              <iframe
+                ref={iframeRef}
+                title={`${item.title} video`}
+                className="absolute inset-0 h-full w-full border-0"
+                src={embedSrc}
+                // Enable YouTube controls so pause/play works.
+                // We keep our overlay buttons clickable via explicit pointer-events.
+                style={{ pointerEvents: "auto" }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                onLoad={syncYoutubeAudio}
+              />
+              <button
+                type="button"
+                className="pointer-events-auto absolute bottom-11 left-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
+                aria-label={playerMuted ? "Unmute video" : "Mute video"}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPlayerMuted((m) => !m);
+                }}
+              >
+                {playerMuted ? (
+                  <VolumeX className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Volume2 className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+              <button
+                type="button"
+                className="pointer-events-auto absolute right-2 top-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
+                aria-label={`Close video: ${item.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEmbedLocked(false);
+                  setPlaying(false);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
           {item.badge ? (
             <div className="absolute left-2 top-2 z-30 rounded-md border border-amber-200/80 bg-gradient-to-br from-amber-400 to-orange-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white title-glow-opposite-light-text shadow-lg md:text-[10px]">
               {item.badge}
@@ -486,12 +239,8 @@ function HighlightCard({
                   e.stopPropagation();
                   setEmbedLocked(true);
                   setPlaying(true);
-                  setVideoPaused(false);
                 }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onCardInteract?.(true);
-                }}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 <motion.div
                   className="rounded-full border border-white/35 bg-black/50 p-3.5 text-white shadow-lg backdrop-blur-sm md:p-4"
@@ -536,7 +285,7 @@ type HighlightedEditsGalleryProps = {
 export function HighlightedEditsGallery({
   items,
   isDark,
-  sectionTitleClass = SECTION_TITLE_ON_HERO,
+  sectionTitleClass,
 }: HighlightedEditsGalleryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -544,23 +293,21 @@ export function HighlightedEditsGallery({
   const stripBRef = useRef<HTMLDivElement>(null);
   const constraintsRef = useRef({ left: 0, right: 0 });
   const cycleLenRef = useRef(0);
-  const pointerInsideRef = useRef(false);
-  const scrollPauseCardsRef = useRef(new Set<number>());
-  const embedLockCardsRef = useRef(new Set<number>());
-  const cardInteractRef = useRef(false);
+  const mobileLayoutRef = useRef(false);
+  const hoverPausedRef = useRef(false);
   const draggingRef = useRef(false);
   const animatingRef = useRef(false);
-  const wrappingRef = useRef(false);
+  /** True when any card has an embed locked (video playing via tap on mobile). */
+  const videoLockedRef = useRef(false);
+  const handleCardLockChange = useCallback((locked: boolean) => {
+    videoLockedRef.current = locked;
+    // Also pause hover-based auto-scroll while a video plays
+    hoverPausedRef.current = locked;
+  }, []);
   const x = useMotionValue(0);
   const [constraints, setConstraints] = useState({ left: 0, right: 0 });
   const [activePhysicalIndex, setActivePhysicalIndex] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [mobileLayout, setMobileLayout] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(max-width: 767px)").matches;
-  });
-  const mobileLayoutRef = useRef(mobileLayout);
-  const [embedLockedActive, setEmbedLockedActive] = useState(false);
   const glowLeft = useSpring(0, { stiffness: 200, damping: 28 });
   const glowRafRef = useRef(0);
   const lastGlowUpdateMsRef = useRef(0);
@@ -579,11 +326,8 @@ export function HighlightedEditsGallery({
     const t = trackRef.current;
     if (!c || !t) return;
     updateCycleLen();
-    const W = cycleLenRef.current;
-    const next =
-      mobileLayoutRef.current && W > 0
-        ? { left: -W, right: 0 }
-        : { left: Math.min(0, c.clientWidth - t.scrollWidth), right: 0 };
+    const max = Math.min(0, c.clientWidth - t.scrollWidth);
+    const next = { left: max, right: 0 };
     constraintsRef.current = next;
     setConstraints(next);
   }, [updateCycleLen]);
@@ -638,13 +382,17 @@ export function HighlightedEditsGallery({
   const slidePrev = useCallback(() => {
     const W = cycleLenRef.current;
     if (W <= 0) return;
-    runAnimate(normalizeTrackX(x.get() + STEP, W));
+    let v = x.get() + STEP;
+    while (v > 0) v -= W;
+    runAnimate(v);
   }, [runAnimate, x]);
 
   const slideNext = useCallback(() => {
     const W = cycleLenRef.current;
     if (W <= 0) return;
-    runAnimate(normalizeTrackX(x.get() - STEP, W));
+    let v = x.get() - STEP;
+    while (v <= -W) v += W;
+    runAnimate(v);
   }, [runAnimate, x]);
 
   useEffect(() => {
@@ -657,48 +405,19 @@ export function HighlightedEditsGallery({
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
-    const sync = () => setMobileLayout(mq.matches);
+    const sync = () => {
+      mobileLayoutRef.current = mq.matches;
+    };
     sync();
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
 
   useEffect(() => {
-    mobileLayoutRef.current = mobileLayout;
-    measureConstraints();
-  }, [mobileLayout, measureConstraints]);
-
-  const wrapTrackPosition = useCallback(
-    (value: number) => normalizeTrackX(value, cycleLenRef.current),
-    [],
-  );
-
-  const handlePlaybackPauseChange = useCallback((cardId: number, pause: boolean) => {
-    if (pause) scrollPauseCardsRef.current.add(cardId);
-    else scrollPauseCardsRef.current.delete(cardId);
-  }, []);
-
-  const handleEmbedLockChange = useCallback((cardId: number, locked: boolean) => {
-    if (locked) embedLockCardsRef.current.add(cardId);
-    else embedLockCardsRef.current.delete(cardId);
-    setEmbedLockedActive(embedLockCardsRef.current.size > 0);
-  }, []);
-
-  const handleCardInteract = useCallback((active: boolean) => {
-    cardInteractRef.current = active;
-  }, []);
-
-  const shouldPauseAutoscroll = useCallback(() => {
-    if (cardInteractRef.current || scrollPauseCardsRef.current.size > 0) return true;
-    // Desktop only: pause while the cursor is over the strip (hover previews).
-    if (!mobileLayoutRef.current && pointerInsideRef.current) return true;
-    return false;
-  }, []);
-
-  useEffect(() => {
     if (reducedMotion) return;
     let rafId = 0;
     let last = performance.now();
+    const PX_PER_MS = 0.242;
 
     const tick = (now: number) => {
       const dt = Math.min(48, now - last);
@@ -707,20 +426,21 @@ export function HighlightedEditsGallery({
       if (
         W > 0 &&
         !mobileLayoutRef.current &&
-        !shouldPauseAutoscroll() &&
+        !hoverPausedRef.current &&
         !draggingRef.current &&
         !animatingRef.current &&
-        !embedLockedActive
+        !videoLockedRef.current
       ) {
-        const next = wrapTrackPosition(x.get() - AUTO_SCROLL_DESKTOP * dt);
-        x.set(next);
+        let v = x.get() - PX_PER_MS * dt;
+        while (v <= -W) v += W;
+        x.set(v);
       }
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [reducedMotion, embedLockedActive, shouldPauseAutoscroll, wrapTrackPosition, x]);
+  }, [reducedMotion, x]);
 
   useLayoutEffect(() => {
     const run = () => {
@@ -745,18 +465,7 @@ export function HighlightedEditsGallery({
     };
   }, [items.length, measureConstraints, recomputeGlow]);
 
-  useMotionValueEvent(x, "change", (latest) => {
-    const W = cycleLenRef.current;
-    if (W > 0 && !wrappingRef.current) {
-      const wrapped = wrapTrackPosition(latest);
-      if (wrapped !== latest) {
-        wrappingRef.current = true;
-        x.set(wrapped);
-        wrappingRef.current = false;
-      }
-    }
-    scheduleGlowRecompute(false);
-  });
+  useMotionValueEvent(x, "change", () => scheduleGlowRecompute(false));
 
   return (
     <motion.section
@@ -775,12 +484,24 @@ export function HighlightedEditsGallery({
       className="relative left-1/2 z-10 w-screen max-w-[100vw] -translate-x-1/2 scroll-mt-28 space-y-0 overflow-x-clip"
       aria-labelledby="highlighted-edits-heading"
     >
-      <div className="relative z-20 mx-auto mb-4 flex max-w-6xl items-end justify-between gap-4 px-6 md:mb-5 md:px-10">
-        <h2 id="highlighted-edits-heading" className={sectionTitleClass}>
-          Highlighted edits
-        </h2>
+      <div className="relative z-20 mx-auto mb-4 flex max-w-6xl items-center justify-between gap-4 px-6 md:px-10">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span
+            className="h-px w-10 shrink-0 bg-white md:w-12 [box-shadow:0_1px_3px_rgba(0,0,0,0.45)]"
+            aria-hidden
+          />
+          <h3
+            id="highlighted-edits-heading"
+            className={
+              sectionTitleClass ??
+              "truncate text-xs font-semibold uppercase tracking-[0.22em] text-white title-glow-opposite-light-text md:text-sm"
+            }
+          >
+            Highlighted edits
+          </h3>
+        </div>
         <span
-          className="shrink-0 font-mono text-xs tabular-nums tracking-widest text-white/80 sm:text-sm"
+          className="shrink-0 font-mono text-xs tabular-nums tracking-widest text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.5)] sm:text-sm"
           aria-hidden
         >
           (01)
@@ -789,17 +510,17 @@ export function HighlightedEditsGallery({
 
       <div
         ref={containerRef}
-        className="relative w-full overflow-x-clip overflow-y-visible py-4 md:py-5"
+        className="relative w-full overflow-x-clip overflow-y-visible py-4"
         onPointerEnter={() => {
-          pointerInsideRef.current = true;
+          hoverPausedRef.current = true;
         }}
         onPointerLeave={() => {
-          pointerInsideRef.current = false;
+          hoverPausedRef.current = false;
         }}
       >
         <motion.div
           aria-hidden
-          className="pointer-events-none absolute top-1/2 z-0 h-[min(340px,68vw)] w-[min(240px,60vw)] -translate-y-1/2 rounded-full opacity-45 blur-3xl md:opacity-[0.52]"
+          className="pointer-events-none absolute top-1/2 z-0 h-[min(360px,72vw)] w-[min(240px,62vw)] -translate-y-1/2 rounded-full opacity-45 blur-3xl md:opacity-[0.52]"
           style={{
             left: glowLeft,
             background: "radial-gradient(ellipse at center, rgba(255, 145, 65, 0.55) 0%, rgba(255, 110, 35, 0.22) 48%, transparent 70%)",
@@ -825,20 +546,26 @@ export function HighlightedEditsGallery({
 
         <motion.div
           ref={trackRef}
-          className="relative z-10 flex cursor-grab touch-pan-y select-none gap-4 pl-12 pr-12 active:cursor-grabbing sm:pl-14 sm:pr-14 md:pl-[4rem] md:pr-[4rem]"
-          style={{ x }}
-          drag={embedLockedActive ? false : "x"}
+          className="relative z-10 flex cursor-grab select-none gap-4 pl-14 pr-14 active:cursor-grabbing sm:pl-16 sm:pr-16 md:pl-[4.5rem] md:pr-[4.5rem]"
+          style={{ x, touchAction: videoLockedRef.current ? "none" : "pan-y" }}
+          drag="x"
+          dragListener={!videoLockedRef.current}
           dragConstraints={constraints}
           dragElastic={0.12}
-          dragMomentum={!embedLockedActive}
+          dragMomentum
           dragTransition={{ bounceStiffness: 340, bounceDamping: 24, power: 0.32, min: 0, max: 0 }}
           onDragStart={() => {
             draggingRef.current = true;
           }}
           onDragEnd={() => {
             draggingRef.current = false;
-            const wrapped = wrapTrackPosition(x.get());
-            if (wrapped !== x.get()) x.set(wrapped);
+            const W = cycleLenRef.current;
+            if (W > 0) {
+              let v = x.get();
+              while (v <= -W) v += W;
+              while (v > 0) v -= W;
+              x.set(v);
+            }
             measureConstraints();
             requestAnimationFrame(measureConstraints);
           }}
@@ -853,9 +580,7 @@ export function HighlightedEditsGallery({
                 total={items.length}
                 isDark={isDark}
                 activePhysicalIndex={activePhysicalIndex}
-                onPlaybackPauseChange={handlePlaybackPauseChange}
-                onEmbedLockChange={handleEmbedLockChange}
-                onCardInteract={handleCardInteract}
+                onLockChange={handleCardLockChange}
               />
             ))}
           </div>
@@ -869,9 +594,7 @@ export function HighlightedEditsGallery({
                 total={items.length}
                 isDark={isDark}
                 activePhysicalIndex={activePhysicalIndex}
-                onPlaybackPauseChange={handlePlaybackPauseChange}
-                onEmbedLockChange={handleEmbedLockChange}
-                onCardInteract={handleCardInteract}
+                onLockChange={handleCardLockChange}
               />
             ))}
           </div>
