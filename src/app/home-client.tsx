@@ -268,8 +268,8 @@ export default function HomeClient({ content }: HomeClientProps) {
     setCvLoading(true);
     setCvToastVisible(true);
 
-    if (cvToastTimerRef.current) window.clearTimeout(cvToastTimerRef.current);
-    cvToastTimerRef.current = window.setTimeout(() => {
+    if (cvToastTimerRef.current) clearTimeout(cvToastTimerRef.current);
+    cvToastTimerRef.current = setTimeout(() => {
       setCvToastVisible(false);
       setCvLoading(false);
       cvToastTimerRef.current = null;
@@ -293,7 +293,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
   useEffect(() => {
     return () => {
-      if (cvToastTimerRef.current) window.clearTimeout(cvToastTimerRef.current);
+      if (cvToastTimerRef.current) clearTimeout(cvToastTimerRef.current);
     };
   }, []);
 
