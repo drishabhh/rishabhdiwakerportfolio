@@ -89,6 +89,7 @@ function HighlightCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const ignoreEndRef = useRef(false);
   const wasPausedRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeMounted = isActive && Boolean(videoId);
   const playing = isActive && !playbackPaused;
@@ -187,9 +188,25 @@ function HighlightCard({
   };
 
   const showControls = playbackPaused || !playing || controlsVisible;
-  const controlsLayerClass = showControls
-    ? "opacity-100 pointer-events-auto transition-opacity duration-300"
-    : "opacity-0 pointer-events-none transition-opacity duration-300";
+  const controlsOpacityClass = showControls ? "opacity-100" : "opacity-0";
+  const controlHitClass = showControls ? "pointer-events-auto" : "pointer-events-none";
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || !playing || playbackPaused || showControls) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const dx = Math.abs(touch.clientX - start.x);
+    const dy = Math.abs(touch.clientY - start.y);
+    if (dx < 12 && dy < 12) revealControls();
+  };
 
   useEffect(() => {
     if (!iframeMounted) {
@@ -330,6 +347,8 @@ function HighlightCard({
         onMouseEnter={handlePointerMove}
         onMouseMove={handlePointerMove}
         onMouseLeave={handlePointerLeave}
+        onTouchStart={playing ? handleTouchStart : undefined}
+        onTouchEnd={playing ? handleTouchEnd : undefined}
       >
       {!expanded ? (
         <>
@@ -348,7 +367,7 @@ function HighlightCard({
               key={videoId}
               src={sessionEmbedSrc}
               title={item.title || "Highlight video"}
-              className="absolute inset-0 z-0 h-full w-full border-0"
+              className="pointer-events-none absolute inset-0 z-0 h-full w-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               onLoad={() => {
@@ -362,24 +381,17 @@ function HighlightCard({
           ) : null}
 
           {playbackPaused ? (
-            <div className="absolute inset-0 z-10 bg-black/25" aria-hidden />
+            <div className="pointer-events-none absolute inset-0 z-10 bg-black/25" aria-hidden />
           ) : null}
 
-          {playing && !controlsVisible ? (
-            <button
-              type="button"
-              aria-label="Show video controls"
-              className="absolute inset-0 z-20 touch-manipulation"
-              onClick={revealControls}
-            />
-          ) : null}
-
-          <div className={`absolute inset-0 z-30 ${controlsLayerClass}`}>
+          <div
+            className={`pointer-events-none absolute inset-0 z-30 transition-opacity duration-300 ${controlsOpacityClass}`}
+          >
             <button
               type="button"
               aria-label={playbackPaused ? "Play video" : "Pause video"}
               onClick={playbackPaused ? handleResume : handlePause}
-              className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur"
+              className={`absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur ${controlHitClass}`}
             >
               {playbackPaused ? (
                 <Play className="h-6 w-6 translate-x-[2px]" fill="currentColor" />
@@ -388,7 +400,7 @@ function HighlightCard({
               )}
             </button>
 
-            <div className="absolute right-2 top-2 flex gap-2">
+            <div className={`absolute right-2 top-2 flex gap-2 ${controlHitClass}`}>
               <button
                 type="button"
                 aria-label={muted ? "Unmute" : "Mute"}
@@ -424,11 +436,19 @@ function HighlightCard({
           </div>
         </>
       ) : (
-        <button
-          type="button"
+        <div
+          role={playable ? "button" : undefined}
+          tabIndex={playable ? 0 : undefined}
           onClick={() => playable && onOpen(index)}
-          className="absolute inset-0 h-full w-full touch-manipulation"
-          aria-label={item.title ? `Play ${item.title}` : "Play video"}
+          onKeyDown={(e) => {
+            if (!playable) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onOpen(index);
+            }
+          }}
+          className={`absolute inset-0 h-full w-full ${playable ? "cursor-pointer" : ""}`}
+          aria-label={playable ? (item.title ? `Play ${item.title}` : "Play video") : undefined}
         >
           {poster ? (
             <Image
@@ -491,7 +511,7 @@ function HighlightCard({
               {item.caption ? <p className="text-[11px] text-white/70">{item.caption}</p> : null}
             </div>
           )}
-        </button>
+        </div>
       )}
       </div>
     </div>
@@ -605,18 +625,24 @@ function MobileRail({
 
   useEffect(() => {
     const rail = railRef.current;
-    if (!rail || activeId === null || playbackPaused) return;
+    if (!rail || activeId === null) return;
 
     let lastLeft = rail.scrollLeft;
     const onScroll = () => {
+      if (playbackPaused) return;
       const moved = Math.abs(rail.scrollLeft - lastLeft);
       lastLeft = rail.scrollLeft;
-      if (moved >= 32) close();
+      if (moved >= 16) close();
     };
 
     rail.addEventListener("scroll", onScroll, { passive: true });
     return () => rail.removeEventListener("scroll", onScroll);
   }, [activeId, playbackPaused, close]);
+
+  useEffect(() => {
+    if (activeId !== null) return;
+    document.body.style.overflow = "";
+  }, [activeId]);
 
   return (
     <div className="space-y-5">
@@ -628,7 +654,7 @@ function MobileRail({
       />
       <div
         ref={railRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden pb-4 touch-pan-x [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden pb-4 overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
           <div key={`${item.href ?? item.title}-${index}`} data-card className="shrink-0">
