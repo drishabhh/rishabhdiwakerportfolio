@@ -113,7 +113,7 @@ export function SiteFooter({
     <footer
       ref={rootRef}
       id="colophon"
-      aria-labelledby="contact-credits-heading"
+      aria-labelledby="contact-heading"
       onMouseEnter={onEnter}
       onMouseMove={paint}
       onMouseLeave={clearPointer}
@@ -163,8 +163,8 @@ export function SiteFooter({
       </div>
 
       <div className="relative z-10 mx-auto max-w-6xl px-6 md:px-10">
-        <h2 id="contact-credits-heading" className={`mb-10 md:mb-12 ${sectionTitleClass}`}>
-          Contact &amp; Credits
+        <h2 id="contact-heading" className={`mb-10 md:mb-12 ${sectionTitleClass}`}>
+          Contact
         </h2>
 
         <div className="grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-10 md:gap-y-0">

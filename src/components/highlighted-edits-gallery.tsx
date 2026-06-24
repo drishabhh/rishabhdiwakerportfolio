@@ -190,6 +190,7 @@ function HighlightCard({
   const showControls = playbackPaused || !playing || controlsVisible;
   const controlsOpacityClass = showControls ? "opacity-100" : "opacity-0";
   const controlHitClass = showControls ? "pointer-events-auto" : "pointer-events-none";
+  const centerShowsPlay = playbackPaused;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -251,6 +252,16 @@ function HighlightCard({
     }
   }, [playbackPaused, iframeMounted]);
 
+  const handleCenterPlay = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLButtonElement).blur();
+    bumpControlsTimer();
+    postToPlayer(iframeRef.current, "playVideo");
+    wasPausedRef.current = false;
+    onResume();
+  };
+
   const handlePause = (e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -268,9 +279,7 @@ function HighlightCard({
   const handleResume = (e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    postToPlayer(iframeRef.current, "playVideo");
-    wasPausedRef.current = false;
-    onResume();
+    handleCenterPlay(e);
   };
 
   const handleToggleMute = (e: React.SyntheticEvent) => {
@@ -375,6 +384,7 @@ function HighlightCard({
                   JSON.stringify({ event: "listening" }),
                   "*",
                 );
+                postToPlayer(iframeRef.current, "playVideo");
                 postToPlayer(iframeRef.current, muted ? "mute" : "unMute");
               }}
             />
@@ -389,11 +399,11 @@ function HighlightCard({
           >
             <button
               type="button"
-              aria-label={playbackPaused ? "Play video" : "Pause video"}
-              onClick={playbackPaused ? handleResume : handlePause}
+              aria-label={centerShowsPlay ? "Play video" : "Pause video"}
+              onClick={centerShowsPlay ? handleCenterPlay : handlePause}
               className={`absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur ${controlHitClass}`}
             >
-              {playbackPaused ? (
+              {centerShowsPlay ? (
                 <Play className="h-6 w-6 translate-x-[2px]" fill="currentColor" />
               ) : (
                 <Pause className="h-6 w-6" fill="currentColor" />
