@@ -12,10 +12,11 @@ import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { smoothScrollToElement } from "@/lib/smooth-scroll";
-import { youtubeThumbnailFromUrl } from "@/lib/youtube";
+import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
 import { Archive, Briefcase, FileText, House, LayoutGrid, Link2, Loader2, Moon, Sparkles, Sun, Zap } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const CV_ICON_SRC = "/download-cv-icon.png";
@@ -182,10 +183,14 @@ export default function HomeClient({ content }: HomeClientProps) {
 
   const highlightedEdits: HighlightEditItem[] = useMemo(
     () =>
-      content.highlights.items.map((item) => ({
-        ...item,
-        thumbnail: youtubeThumbnailFromUrl(item.href),
-      })),
+      content.highlights.items.map((item) => {
+        const href = normalizeYouTubeHref(item.href);
+        return {
+          ...item,
+          href,
+          thumbnail: youtubeThumbnailFromUrl(href),
+        };
+      }),
     [content.highlights.items],
   );
 
@@ -561,7 +566,7 @@ export default function HomeClient({ content }: HomeClientProps) {
       </motion.header>
 
       <div
-        className="fixed right-4 top-[max(5.25rem,env(safe-area-inset-top))] z-[60] md:right-8 md:top-[max(5.5rem,env(safe-area-inset-top))]"
+        className="fixed right-4 top-[max(5.25rem,env(safe-area-inset-top))] z-[60] flex flex-col items-center gap-2 md:right-8 md:top-[max(5.5rem,env(safe-area-inset-top))]"
       >
         {cvToastVisible ? (
           <motion.div

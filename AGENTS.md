@@ -14,3 +14,7 @@ When committing or pushing **code** changes (dashboard UI, API routes, component
 - Production content on Vercel is stored in **Blob** (or GitHub if configured), not in the repo.
 
 Before `git add`, run `git status` and exclude any dashboard test data files above.
+
+## Resume builder (separate app)
+
+The AI resume tailoring tool lives in `resume-builder/` — its own Next.js app, dependencies, and deploy. It is not part of the portfolio site routes or build.

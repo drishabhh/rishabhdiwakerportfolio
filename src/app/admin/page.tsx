@@ -11,6 +11,7 @@ import type {
   VaultPlaylist,
 } from "@/lib/content-types";
 import { originalHighlightItems } from "@/lib/original-highlights";
+import { normalizeYouTubeHref, youtubeThumbnailFromUrl, youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -42,6 +43,29 @@ const sections: { id: SectionId; label: string }[] = [
   { id: "tabIcon", label: "Tab Icon" },
   { id: "seo", label: "SEO" },
 ];
+
+function HighlightVideoThumb({ href, className }: { href: string; className?: string }) {
+  const thumb = youtubeThumbnailFromUrl(href);
+  const videoId = youtubeVideoIdFromUrl(href);
+
+  if (!thumb) {
+    return (
+      <div
+        className={`flex shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-900/80 text-[10px] text-zinc-500 ${className ?? "h-16 w-[4.5rem]"}`}
+      >
+        No preview
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={thumb}
+      alt={videoId ? `Preview for ${videoId}` : "Video preview"}
+      className={`shrink-0 rounded-lg border border-zinc-700 object-cover ${className ?? "h-16 w-[4.5rem]"}`}
+    />
+  );
+}
 
 function Field({
   label,
@@ -225,13 +249,23 @@ export default function AdminPage() {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     setSaving(true);
     setMessage("");
+    const payload: SiteContent = {
+      ...content,
+      highlights: {
+        items: content.highlights.items.map((item) => ({
+          ...item,
+          href: normalizeYouTubeHref(item.href),
+        })),
+      },
+    };
     const res = await fetch("/api/content", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(content),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (res.ok) {
+      setContent(payload);
       setMessage("Saved! Changes appear on the site within a few seconds.");
       setTimeout(() => setMessage(""), 4000);
     } else {
@@ -615,8 +649,8 @@ export default function AdminPage() {
                         ...content,
                         highlights: {
                           items: [
-                            ...content.highlights.items,
                             { title: "New highlight", views: "0", caption: "", href: "", badge: "" },
+                            ...content.highlights.items,
                           ],
                         },
                       })
@@ -637,12 +671,22 @@ export default function AdminPage() {
 
               {content.highlights.items.map((item, i) => (
                 <div key={`${item.href}-${i}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-zinc-300">Video {i + 1}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <HighlightVideoThumb href={item.href} />
+                      <div className="min-w-0 pt-0.5">
+                        <p className="text-sm font-medium text-zinc-300">Video {i + 1}</p>
+                        {item.title ? (
+                          <p className="truncate text-xs text-zinc-500">{item.title}</p>
+                        ) : (
+                          <p className="text-xs text-zinc-600">No title yet</p>
+                        )}
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => deleteHighlight(i)}
-                      className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
+                      className="inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
                       title="Move to trash"
                     >
                       <Trash2 size={16} />
@@ -650,7 +694,27 @@ export default function AdminPage() {
                     </button>
                   </div>
                   <Field label="Title" value={item.title} onChange={(v) => updateHighlight(i, { title: v })} />
-                  <Field label="YouTube URL" value={item.href} onChange={(v) => updateHighlight(i, { href: v })} hint="Paste any YouTube watch or youtu.be link" />
+                  <Field
+                    label="YouTube URL"
+                    value={item.href}
+                    onChange={(v) => updateHighlight(i, { href: v })}
+                    onBlur={() => {
+                      const normalized = normalizeYouTubeHref(item.href);
+                      if (normalized !== item.href) updateHighlight(i, { href: normalized });
+                    }}
+                    hint="Paste any YouTube watch, Shorts, or youtu.be link"
+                  />
+                  {item.href.trim() ? (
+                    youtubeVideoIdFromUrl(item.href) ? (
+                      <p className="text-xs text-emerald-400">
+                        Video ID: {youtubeVideoIdFromUrl(item.href)} — will play in gallery
+                      </p>
+                    ) : (
+                      <p className="text-xs text-red-400">
+                        Could not read a video ID from this URL. Use a direct watch, Shorts, or youtu.be link.
+                      </p>
+                    )
+                  ) : null}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Views / metric" value={item.views} onChange={(v) => updateHighlight(i, { views: v })} />
                     <Field label="Badge (optional)" value={item.badge || ""} onChange={(v) => updateHighlight(i, { badge: v })} />
@@ -682,9 +746,12 @@ export default function AdminPage() {
                         key={`trash-${item.href}-${i}`}
                         className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-zinc-200">{item.title || "Untitled"}</p>
-                          <p className="truncate text-xs text-zinc-500">{item.href || "No URL"}</p>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <HighlightVideoThumb href={item.href} className="h-12 w-16" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-zinc-200">{item.title || "Untitled"}</p>
+                            <p className="truncate text-xs text-zinc-500">{item.href || "No URL"}</p>
+                          </div>
                         </div>
                         <div className="flex shrink-0 gap-2">
                           <button

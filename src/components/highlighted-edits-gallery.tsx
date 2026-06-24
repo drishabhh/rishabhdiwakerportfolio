@@ -1,9 +1,37 @@
 "use client";
 
-import { animate, motion, useMotionValue, useMotionValueEvent, useSpring, useTransform } from "framer-motion";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Play, Volume2, VolumeX, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+import { youtubeVideoIdFromUrl } from "@/lib/youtube";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type PlayerCommand = "mute" | "unMute" | "pauseVideo" | "playVideo";
+
+function embedSrc(videoId: string, muted: boolean, startSeconds?: number): string {
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: muted ? "1" : "0",
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    controls: "0",
+    enablejsapi: "1",
+  });
+  if (startSeconds != null && startSeconds > 0) {
+    params.set("start", String(Math.floor(startSeconds)));
+  }
+  if (typeof window !== "undefined") {
+    params.set("origin", window.location.origin);
+  }
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
+function postToPlayer(iframe: HTMLIFrameElement | null, command: PlayerCommand) {
+  iframe?.contentWindow?.postMessage(
+    JSON.stringify({ event: "command", func: command, args: [] }),
+    "*",
+  );
+}
 
 export type HighlightEditItem = {
   title: string;
@@ -15,592 +43,819 @@ export type HighlightEditItem = {
   badge?: string;
 };
 
-const GAP = 16;
-const CARD_WIDTH = 228;
-const STEP = CARD_WIDTH + GAP;
-const GLOW_HALF = 120;
-const FAN_DEG = 1.05;
-
-type HighlightCardProps = {
-  item: HighlightEditItem;
-  physicalIndex: number;
-  visualIndex: number;
-  total: number;
-  isDark: boolean;
-  activePhysicalIndex: number;
-  /** Called when this card locks/unlocks a playing embed (mobile fix). */
-  onLockChange?: (locked: boolean) => void;
-};
-
-const hoverTiltEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
-
-function youtubePostCommand(iframe: HTMLIFrameElement | null, func: string, args: unknown[] = []) {
-  const w = iframe?.contentWindow;
-  if (!w) return;
-  w.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube.com");
-}
-
-function youtubeEmbedFromUrl(url?: string, opts?: { muted?: boolean; origin?: string }): string | undefined {
-  if (!url) return undefined;
-  try {
-    const parsed = new URL(url);
-    const id = parsed.searchParams.get("v");
-    if (!id) return undefined;
-    const q = new URLSearchParams({
-      rel: "0",
-      modestbranding: "1",
-      playsinline: "1",
-      controls: "1",
-      autoplay: "1",
-    });
-    if (opts?.muted) q.set("mute", "1");
-    if (opts?.origin) {
-      q.set("enablejsapi", "1");
-      q.set("origin", opts.origin);
-    }
-    const start = parsed.searchParams.get("t");
-    if (start) q.set("start", start.replace(/[^\d]/g, ""));
-    return `https://www.youtube.com/embed/${id}?${q.toString()}`;
-  } catch {
-    return undefined;
-  }
-}
-
-function HighlightCard({ item, physicalIndex, visualIndex, total, isDark, activePhysicalIndex, onLockChange }: HighlightCardProps) {
-  const sheenX = useSpring(50, { stiffness: 220, damping: 30 });
-  const sheenOpacity = useSpring(0, { stiffness: 240, damping: 28 });
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [playing, setPlaying] = useState(false);
-  /** True when user opened via the play button — keep iframe interactive and do not stop on hover leave. */
-  const [embedLocked, setEmbedLocked] = useState(false);
-  const [hoverAutoplayOk, setHoverAutoplayOk] = useState(true);
-  const [playerMuted, setPlayerMuted] = useState(true);
-  const embedOrigin = typeof window !== "undefined" ? window.location.origin : "";
-  const embedSrc = playing
-    ? youtubeEmbedFromUrl(item.href, { muted: !embedLocked, origin: embedOrigin || undefined })
-    : undefined;
-
-  const syncYoutubeAudio = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    if (playerMuted) {
-      youtubePostCommand(iframe, "mute");
-    } else {
-      youtubePostCommand(iframe, "unMute");
-    }
-  }, [playerMuted]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const sync = () => setHoverAutoplayOk(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    if (!playing) return;
-    setPlayerMuted(!embedLocked);
-  }, [playing, embedLocked]);
-
-  // Notify gallery when embed locks/unlocks so it can pause scroll & drag on mobile
-  useEffect(() => {
-    onLockChange?.(embedLocked);
-  }, [embedLocked, onLockChange]);
-
-  useEffect(() => {
-    if (!embedSrc) return;
-    const t = window.setTimeout(syncYoutubeAudio, 120);
-    return () => window.clearTimeout(t);
-  }, [embedSrc, syncYoutubeAudio]);
-
-  const fan = (visualIndex - (total - 1) / 2) * FAN_DEG;
-  const bgPos = useTransform(sheenX, (v) => `${v}% 50%`);
-
-  const glassBorder = isDark
-    ? "border border-white/20 bg-zinc-950/30 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.45)] ring-1 ring-white/10 backdrop-blur-md"
-    : "border border-white/55 bg-white/40 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.15)] ring-1 ring-zinc-200/70 backdrop-blur-md";
-
-  return (
-    <div
-      data-highlight-card
-      className="relative shrink-0"
-      style={{ width: CARD_WIDTH, zIndex: activePhysicalIndex === physicalIndex ? 3 : 1, perspective: 1100 }}
-    >
-      <motion.div
-        className={`relative overflow-hidden rounded-2xl ${glassBorder}`}
-        initial={false}
-        whileHover={{
-          rotateX: -8,
-          rotateY: 12,
-          scale: 1.03,
-          translateZ: 18,
-        }}
-        transition={{
-          duration: 0.5,
-          ease: hoverTiltEase,
-        }}
-        style={{
-          rotateZ: fan,
-          transformStyle: "preserve-3d",
-          transformOrigin: "center center",
-        }}
-        onHoverStart={() => {
-          sheenOpacity.set(0.52);
-          sheenX.set(68);
-          if (item.href && hoverAutoplayOk) setPlaying(true);
-        }}
-        onHoverEnd={() => {
-          sheenOpacity.set(0);
-          sheenX.set(50);
-          if (!embedLocked) setPlaying(false);
-        }}
-      >
-        <div className={`relative w-full ${item.href ? "cursor-default" : ""}`} style={{ aspectRatio: "9/16", maxHeight: embedLocked ? "min(75vh, 480px)" : undefined }}>
-          {!embedSrc ? (
-            <>
-              <Image
-                src={item.thumbnail}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 72vw, 280px"
-                unoptimized={Boolean(item.thumbUnoptimized)}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/5 to-transparent" />
-              <motion.div
-                className="pointer-events-none absolute inset-0 mix-blend-overlay"
-                style={{
-                  opacity: sheenOpacity,
-                  backgroundImage:
-                    "linear-gradient(105deg, transparent 38%, rgba(255,255,255,0.38) 50%, transparent 62%)",
-                  backgroundSize: "200% 100%",
-                  backgroundPosition: bgPos,
-                }}
-              />
-            </>
-          ) : (
-            <div className="absolute inset-0 z-20 bg-black pointer-events-auto">
-              <iframe
-                ref={iframeRef}
-                title={`${item.title} video`}
-                className="absolute inset-0 h-full w-full border-0"
-                src={embedSrc}
-                // Enable YouTube controls so pause/play works.
-                // We keep our overlay buttons clickable via explicit pointer-events.
-                style={{ pointerEvents: "auto" }}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                onLoad={syncYoutubeAudio}
-              />
-              <button
-                type="button"
-                className="pointer-events-auto absolute bottom-11 left-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-                aria-label={playerMuted ? "Unmute video" : "Mute video"}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPlayerMuted((m) => !m);
-                }}
-              >
-                {playerMuted ? (
-                  <VolumeX className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Volume2 className="h-4 w-4" aria-hidden />
-                )}
-              </button>
-              <button
-                type="button"
-                className="pointer-events-auto absolute right-2 top-2 z-30 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-black/65 text-white backdrop-blur"
-                aria-label={`Close video: ${item.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEmbedLocked(false);
-                  setPlaying(false);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-          )}
-          {item.badge ? (
-            <div className="absolute left-2 top-2 z-30 rounded-md border border-amber-200/80 bg-gradient-to-br from-amber-400 to-orange-600 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white title-glow-opposite-light-text shadow-lg md:text-[10px]">
-              {item.badge}
-            </div>
-          ) : null}
-          {!embedSrc ? <div className="absolute inset-0 flex items-center justify-center">
-            {item.href ? (
-              <button
-                type="button"
-                className="relative z-20 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-400/90 focus-visible:ring-offset-2 focus-visible:ring-offset-black/50"
-                aria-label={`Play video: ${item.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEmbedLocked(true);
-                  setPlaying(true);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <motion.div
-                  className="rounded-full border border-white/35 bg-black/50 p-3.5 text-white shadow-lg backdrop-blur-sm md:p-4"
-                  whileHover={{
-                    scale: 1.08,
-                    boxShadow: "0 0 42px rgba(255, 190, 110, 0.5)",
-                  }}
-                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                >
-                  <Play className="ml-0.5 h-5 w-5 fill-white text-white md:h-6 md:w-6" aria-hidden />
-                </motion.div>
-              </button>
-            ) : (
-              <motion.div
-                className="rounded-full border border-white/35 bg-black/50 p-3.5 text-white shadow-lg backdrop-blur-sm md:p-4"
-                aria-hidden
-              >
-                <Play className="ml-0.5 h-5 w-5 fill-white text-white md:h-6 md:w-6" aria-hidden />
-              </motion.div>
-            )}
-          </div> : null}
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 px-3 pb-3 pt-8">
-            <p className="line-clamp-2 text-[10px] font-medium uppercase tracking-wide text-white title-glow-opposite-light-text md:text-[11px]">
-              {item.title}
-            </p>
-            {item.caption ? (
-              <p className="mt-0.5 text-[9px] font-normal leading-snug text-white/65 md:text-[10px]">{item.caption}</p>
-            ) : null}
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 type HighlightedEditsGalleryProps = {
   items: HighlightEditItem[];
   isDark: boolean;
   sectionTitleClass?: string;
 };
 
+function posterFor(item: HighlightEditItem): string {
+  if (item.thumbnail) return item.thumbnail;
+  const id = youtubeVideoIdFromUrl(item.href ?? "");
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+}
+
+type CardProps = {
+  item: HighlightEditItem;
+  index: number;
+  isActive: boolean;
+  isDark: boolean;
+  muted: boolean;
+  playbackPaused: boolean;
+  onOpen: (index: number) => void;
+  onClose: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onToggleMute: () => void;
+};
+
+function HighlightCard({
+  item,
+  index,
+  isActive,
+  isDark,
+  muted,
+  playbackPaused,
+  onOpen,
+  onClose,
+  onPause,
+  onResume,
+  onToggleMute,
+}: CardProps) {
+  const poster = posterFor(item);
+  const videoId = youtubeVideoIdFromUrl(item.href ?? "");
+  const playable = Boolean(videoId);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const ignoreEndRef = useRef(false);
+  const wasPausedRef = useRef(false);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iframeMounted = isActive && Boolean(videoId);
+  const playing = isActive && !playbackPaused;
+  const [progress, setProgress] = useState(0);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [cinemaMode, setCinemaMode] = useState(false);
+  const expanded = isFullscreen || cinemaMode;
+  // Always start muted in the embed URL — browsers allow that for autoplay.
+  // Sound is restored immediately via postMessage when the parent has muted=false.
+  const sessionEmbedSrc = useMemo(() => {
+    if (!iframeMounted || !videoId) return null;
+    return embedSrc(videoId, true);
+  }, [iframeMounted, videoId]);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideControlsTimerRef.current) {
+      clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHideControls = useCallback(() => {
+    clearHideTimer();
+    if (!playing || playbackPaused) return;
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+  }, [playing, playbackPaused, clearHideTimer]);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === cardRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isActive) {
+      wasPausedRef.current = false;
+      setCinemaMode(false);
+      if (document.fullscreenElement === cardRef.current) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, [isActive]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    if (!cinemaMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCinemaMode(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cinemaMode]);
+
+  useEffect(() => {
+    clearHideTimer();
+    if (!playing || playbackPaused) {
+      setControlsVisible(true);
+      return;
+    }
+    setControlsVisible(true);
+    scheduleHideControls();
+    return clearHideTimer;
+  }, [playing, playbackPaused, scheduleHideControls, clearHideTimer]);
+
+  const revealControls = () => {
+    setControlsVisible(true);
+    scheduleHideControls();
+  };
+
+  const bumpControlsTimer = () => {
+    if (playing && !playbackPaused) scheduleHideControls();
+  };
+
+  const handlePointerMove = () => {
+    if (!playing || playbackPaused) return;
+    setControlsVisible(true);
+    scheduleHideControls();
+  };
+
+  const handlePointerLeave = () => {
+    if (playing && !playbackPaused) {
+      clearHideTimer();
+      setControlsVisible(false);
+    }
+  };
+
+  const showControls = playbackPaused || !playing || controlsVisible;
+  const controlsLayerClass = showControls
+    ? "opacity-100 pointer-events-auto transition-opacity duration-300"
+    : "opacity-0 pointer-events-none transition-opacity duration-300";
+
+  useEffect(() => {
+    if (!iframeMounted) {
+      setProgress(0);
+      return;
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      let data: { event?: string; info?: number | { currentTime?: number; duration?: number } };
+      try {
+        data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      } catch {
+        return;
+      }
+      if (data.event === "onStateChange" && data.info === 0 && !ignoreEndRef.current) {
+        onClose();
+      }
+      if (data.event === "infoDelivery" && data.info && typeof data.info === "object") {
+        const { currentTime = 0, duration = 0 } = data.info;
+        if (duration > 0) setProgress(Math.min(100, (currentTime / duration) * 100));
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [iframeMounted, onClose]);
+
+  useEffect(() => {
+    if (!iframeMounted) return;
+    postToPlayer(iframeRef.current, muted ? "mute" : "unMute");
+  }, [muted, iframeMounted]);
+
+  useEffect(() => {
+    if (!iframeMounted) return;
+    if (playbackPaused) {
+      postToPlayer(iframeRef.current, "pauseVideo");
+      wasPausedRef.current = true;
+    } else if (wasPausedRef.current) {
+      postToPlayer(iframeRef.current, "playVideo");
+      wasPausedRef.current = false;
+    }
+  }, [playbackPaused, iframeMounted]);
+
+  const handlePause = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLButtonElement).blur();
+    bumpControlsTimer();
+    ignoreEndRef.current = true;
+    postToPlayer(iframeRef.current, "pauseVideo");
+    wasPausedRef.current = true;
+    onPause();
+    window.setTimeout(() => {
+      ignoreEndRef.current = false;
+    }, 300);
+  };
+
+  const handleResume = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    postToPlayer(iframeRef.current, "playVideo");
+    wasPausedRef.current = false;
+    onResume();
+  };
+
+  const handleToggleMute = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLButtonElement).blur();
+    bumpControlsTimer();
+    onToggleMute();
+  };
+
+  const handleClose = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCinemaMode(false);
+    if (document.fullscreenElement === cardRef.current) {
+      document.exitFullscreen().catch(() => {});
+    }
+    ignoreEndRef.current = true;
+    onClose();
+    window.setTimeout(() => {
+      ignoreEndRef.current = false;
+    }, 300);
+  };
+
+  const exitExpanded = useCallback(async () => {
+    setCinemaMode(false);
+    if (document.fullscreenElement === cardRef.current) {
+      await document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  const toggleFullscreen = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLButtonElement).blur();
+    bumpControlsTimer();
+    const el = cardRef.current;
+    if (!el) return;
+
+    if (expanded) {
+      await exitExpanded();
+      return;
+    }
+
+    try {
+      await el.requestFullscreen();
+    } catch {
+      setCinemaMode(true);
+    }
+  };
+
+  // Viewfinder-style corner brackets instead of a full border — reads as
+  // "camera/editor framing" rather than a generic card outline.
+  const bracketColor = isDark ? "border-white/35" : "border-black/35";
+  const corner = `pointer-events-none absolute h-4 w-4 ${bracketColor} z-20 transition-opacity duration-300`;
+
+  return (
+    <div
+      ref={cardRef}
+      className={`group relative aspect-[9/16] w-[200px] shrink-0 snap-center overflow-hidden rounded-2xl sm:w-[220px] ${
+        isDark ? "bg-white/5" : "bg-black/5"
+      } ${
+        cinemaMode
+          ? "fixed inset-0 z-[100] flex h-dvh w-dvw max-w-none items-center justify-center rounded-none bg-black"
+          : ""
+      } fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
+    >
+      <div
+        className={`relative h-full w-full overflow-hidden rounded-2xl ${
+          expanded
+            ? "aspect-[9/16] h-full max-h-dvh w-auto max-w-[min(100vw,calc(100dvh*9/16))] rounded-none"
+            : "h-full w-full"
+        } fullscreen:aspect-[9/16] fullscreen:h-full fullscreen:max-h-dvh fullscreen:w-auto fullscreen:max-w-[min(100vw,calc(100dvh*9/16))] fullscreen:rounded-none`}
+        onMouseEnter={handlePointerMove}
+        onMouseMove={handlePointerMove}
+        onMouseLeave={handlePointerLeave}
+      >
+      {!expanded ? (
+        <>
+      <span className={`${corner} left-0 top-0 border-l-2 border-t-2 rounded-tl-lg opacity-60 group-hover:opacity-100`} />
+      <span className={`${corner} right-0 top-0 border-r-2 border-t-2 rounded-tr-lg opacity-60 group-hover:opacity-100`} />
+      <span className={`${corner} bottom-0 left-0 border-b-2 border-l-2 rounded-bl-lg opacity-60 group-hover:opacity-100`} />
+      <span className={`${corner} bottom-0 right-0 border-b-2 border-r-2 rounded-br-lg opacity-60 group-hover:opacity-100`} />
+        </>
+      ) : null}
+
+      {isActive ? (
+        <>
+          {sessionEmbedSrc ? (
+            <iframe
+              ref={iframeRef}
+              key={videoId}
+              src={sessionEmbedSrc}
+              title={item.title || "Highlight video"}
+              className="absolute inset-0 z-0 h-full w-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              onLoad={() => {
+                iframeRef.current?.contentWindow?.postMessage(
+                  JSON.stringify({ event: "listening" }),
+                  "*",
+                );
+                postToPlayer(iframeRef.current, muted ? "mute" : "unMute");
+              }}
+            />
+          ) : null}
+
+          {playbackPaused ? (
+            <div className="absolute inset-0 z-10 bg-black/25" aria-hidden />
+          ) : null}
+
+          {playing && !controlsVisible ? (
+            <button
+              type="button"
+              aria-label="Show video controls"
+              className="absolute inset-0 z-20 touch-manipulation"
+              onClick={revealControls}
+            />
+          ) : null}
+
+          <div className={`absolute inset-0 z-30 ${controlsLayerClass}`}>
+            <button
+              type="button"
+              aria-label={playbackPaused ? "Play video" : "Pause video"}
+              onClick={playbackPaused ? handleResume : handlePause}
+              className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur"
+            >
+              {playbackPaused ? (
+                <Play className="h-6 w-6 translate-x-[2px]" fill="currentColor" />
+              ) : (
+                <Pause className="h-6 w-6" fill="currentColor" />
+              )}
+            </button>
+
+            <div className="absolute right-2 top-2 flex gap-2">
+              <button
+                type="button"
+                aria-label={muted ? "Unmute" : "Mute"}
+                onClick={handleToggleMute}
+                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
+              >
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                aria-label={expanded ? "Exit fullscreen" : "Enter fullscreen"}
+                onClick={toggleFullscreen}
+                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
+              >
+                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                aria-label="Close video"
+                onClick={handleClose}
+                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/45 text-white/80 shadow-lg backdrop-blur transition-colors hover:bg-black/75 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="absolute inset-x-0 bottom-0 h-1 bg-white/15">
+              <div
+                className="h-full bg-white transition-[width] duration-200 ease-linear"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => playable && onOpen(index)}
+          className="absolute inset-0 h-full w-full touch-manipulation"
+          aria-label={item.title ? `Play ${item.title}` : "Play video"}
+        >
+          {poster ? (
+            <Image
+              src={poster}
+              alt={item.title || "Highlight"}
+              fill
+              sizes="220px"
+              unoptimized={item.thumbUnoptimized}
+              // Slow Ken Burns drift on hover/focus — signals motion-design
+              // intent without re-introducing autoplay. Long duration reads
+              // as deliberate, not jumpy.
+              className="object-cover transition-transform duration-[6000ms] ease-out group-hover:scale-110 group-focus-visible:scale-110"
+            />
+          ) : (
+            <div className={`h-full w-full ${isDark ? "bg-white/10" : "bg-black/10"}`} />
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+          {item.badge ? (
+            <span className="absolute left-3 top-3 rounded-full bg-orange-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+              {item.badge}
+            </span>
+          ) : null}
+
+          {playable ? (
+            <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center">
+              {/* Ring that fills on hover — reads as a "tool" affordance,
+                  not just a generic play icon. */}
+              <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90 text-white/70">
+                <circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" />
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="21"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeDasharray={2 * Math.PI * 21}
+                  strokeDashoffset={2 * Math.PI * 21}
+                  className="transition-[stroke-dashoffset] duration-500 ease-out group-hover:[stroke-dashoffset:0]"
+                />
+              </svg>
+              <span className="relative flex h-full w-full scale-90 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur transition-transform duration-300 group-hover:scale-100">
+                <Play className="h-5 w-5 translate-x-[1px]" fill="currentColor" />
+              </span>
+            </span>
+          ) : null}
+
+          {(item.title || item.views || item.caption) && (
+            <div className="absolute inset-x-0 bottom-0 p-3 text-left">
+              {item.views ? (
+                <p className="text-lg font-bold leading-none text-white">{item.views}</p>
+              ) : null}
+              {item.title ? (
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-white/90">
+                  {item.title}
+                </p>
+              ) : null}
+              {item.caption ? <p className="text-[11px] text-white/70">{item.caption}</p> : null}
+            </div>
+          )}
+        </button>
+      )}
+      </div>
+    </div>
+  );
+}
+
+function GalleryHeader({
+  isDark,
+  sectionTitleClass,
+  onPrev,
+  onNext,
+  constrained = false,
+}: {
+  isDark: boolean;
+  sectionTitleClass?: string;
+  onPrev: () => void;
+  onNext: () => void;
+  constrained?: boolean;
+}) {
+  const navBtnClass = `flex h-10 w-10 touch-manipulation items-center justify-center rounded-full border transition-colors ${
+    isDark
+      ? "border-white/15 bg-black/40 text-white hover:bg-white/10"
+      : "border-black/15 bg-white/80 text-black hover:bg-black/5"
+  }`;
+
+  const inner = (
+    <>
+      <h3
+        id="highlighted-edits-heading"
+        className={sectionTitleClass ?? "text-xs font-semibold uppercase tracking-[0.22em] md:text-sm"}
+      >
+        Highlighted edits
+      </h3>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          aria-label="Show previous highlighted edits"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+          className={navBtnClass}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Show next highlighted edits"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+          className={navBtnClass}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </>
+  );
+
+  if (constrained) {
+    return (
+      <div className="relative z-30 mx-auto flex max-w-6xl items-end justify-between gap-4 px-6 md:px-10">
+        {inner}
+      </div>
+    );
+  }
+
+  return <div className="relative z-30 flex items-end justify-between">{inner}</div>;
+}
+
+function MobileRail({
+  items,
+  isDark,
+  sectionTitleClass,
+}: {
+  items: HighlightEditItem[];
+  isDark: boolean;
+  sectionTitleClass?: string;
+}) {
+  const railRef = useRef<HTMLDivElement>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [muted, setMuted] = useState(true);
+  const [playbackPaused, setPlaybackPaused] = useState(false);
+
+  const close = useCallback(() => {
+    setActiveId(null);
+    setPlaybackPaused(false);
+  }, []);
+
+  const open = useCallback((index: number) => {
+    setMuted(false);
+    setPlaybackPaused(false);
+    setActiveId(index);
+  }, []);
+
+  const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
+  const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
+
+  const scrollByCards = useCallback(
+    (dir: 1 | -1) => {
+      close();
+      const rail = railRef.current;
+      if (!rail) return;
+      requestAnimationFrame(() => {
+        rail.scrollBy({ left: dir * 236, behavior: "smooth" });
+      });
+    },
+    [close],
+  );
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail || activeId === null || playbackPaused) return;
+
+    let lastLeft = rail.scrollLeft;
+    const onScroll = () => {
+      const moved = Math.abs(rail.scrollLeft - lastLeft);
+      lastLeft = rail.scrollLeft;
+      if (moved >= 32) close();
+    };
+
+    rail.addEventListener("scroll", onScroll, { passive: true });
+    return () => rail.removeEventListener("scroll", onScroll);
+  }, [activeId, playbackPaused, close]);
+
+  return (
+    <div className="space-y-5">
+      <GalleryHeader
+        isDark={isDark}
+        sectionTitleClass={sectionTitleClass}
+        onPrev={() => scrollByCards(-1)}
+        onNext={() => scrollByCards(1)}
+      />
+      <div
+        ref={railRef}
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden pb-4 touch-pan-x [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {items.map((item, index) => (
+          <div key={`${item.href ?? item.title}-${index}`} data-card className="shrink-0">
+            <HighlightCard
+              item={item}
+              index={index}
+              isActive={activeId === index}
+              isDark={isDark}
+              muted={muted}
+              playbackPaused={activeId === index && playbackPaused}
+              onOpen={open}
+              onClose={close}
+              onPause={pausePlayback}
+              onResume={resumePlayback}
+              onToggleMute={() => setMuted((m) => !m)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const CARD_STEP = 220 + 16;
+/** Desktop auto-marquee only — mobile uses native swipe scroll (unchanged). */
+const MARQUEE_SPEED_PX_PER_SEC = 72;
+
+function DesktopMarquee({
+  items,
+  isDark,
+  sectionTitleClass,
+}: {
+  items: HighlightEditItem[];
+  isDark: boolean;
+  sectionTitleClass?: string;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef(0);
+  const cycleLenRef = useRef(items.length * CARD_STEP);
+  // 1 = full speed, 0 = stopped. Lerped every frame instead of snapping —
+  // an instant stop reads as a glitch, a deceleration reads as intentional.
+  const speedTargetRef = useRef(1);
+  const speedRef = useRef(1);
+  const hoveredRef = useRef(false);
+  const draggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartOffsetRef = useRef(0);
+
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [muted, setMuted] = useState(true);
+  const [playbackPaused, setPlaybackPaused] = useState(false);
+
+  useEffect(() => {
+    cycleLenRef.current = items.length * CARD_STEP || 1;
+  }, [items.length]);
+
+  // Keep the lerp target in sync with whether a video is open. If a video
+  // closes while the cursor happens to still be hovering, stay paused
+  // rather than snapping back to full speed.
+  useEffect(() => {
+    speedTargetRef.current = activeId !== null || hoveredRef.current ? 0 : 1;
+  }, [activeId]);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+
+      // Ease the current speed toward the target every frame — this is
+      // the "decelerate, don't snap" feel.
+      const lerpRate = 1 - Math.pow(0.001, dt); // ~300ms to settle
+      speedRef.current += (speedTargetRef.current - speedRef.current) * lerpRate;
+
+      if (!draggingRef.current && speedRef.current > 0.001) {
+        offsetRef.current += MARQUEE_SPEED_PX_PER_SEC * speedRef.current * dt;
+        const cycle = cycleLenRef.current;
+        if (cycle > 0) offsetRef.current = ((offsetRef.current % cycle) + cycle) % cycle;
+      }
+
+      if (trackRef.current) {
+        trackRef.current.style.transform = `translate3d(${-offsetRef.current}px,0,0)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const nudge = useCallback((dir: 1 | -1) => {
+    setActiveId(null);
+    setPlaybackPaused(false);
+    offsetRef.current += dir * CARD_STEP;
+    const cycle = cycleLenRef.current;
+    if (cycle > 0) offsetRef.current = ((offsetRef.current % cycle) + cycle) % cycle;
+  }, []);
+
+  const open = useCallback((index: number) => {
+    setMuted(false);
+    setPlaybackPaused(false);
+    setActiveId(index);
+  }, []);
+
+  const close = useCallback(() => {
+    setActiveId(null);
+    setPlaybackPaused(false);
+  }, []);
+
+  const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
+  const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
+
+  if (items.length === 0) return null;
+
+  const strip = (copyKey: string, indexOffset: number) =>
+    items.map((item, i) => (
+      <div key={`${copyKey}-${item.href ?? item.title}-${i}`} className="shrink-0">
+        <HighlightCard
+          item={item}
+          index={i + indexOffset}
+          isActive={activeId === i + indexOffset}
+          isDark={isDark}
+          muted={muted}
+          playbackPaused={activeId === i + indexOffset && playbackPaused}
+          onOpen={open}
+          onClose={close}
+          onPause={pausePlayback}
+          onResume={resumePlayback}
+          onToggleMute={() => setMuted((m) => !m)}
+        />
+      </div>
+    ));
+
+  return (
+    <div className="space-y-5">
+      <GalleryHeader
+        isDark={isDark}
+        sectionTitleClass={sectionTitleClass}
+        onPrev={() => nudge(-1)}
+        onNext={() => nudge(1)}
+        constrained
+      />
+
+      <div
+        className="relative w-full overflow-hidden py-4"
+        onMouseEnter={() => {
+          hoveredRef.current = true;
+          if (activeId === null) speedTargetRef.current = 0;
+        }}
+        onMouseLeave={() => {
+          hoveredRef.current = false;
+          draggingRef.current = false;
+          if (activeId === null) speedTargetRef.current = 1;
+        }}
+        onPointerDown={(e) => {
+          if (activeId !== null) return;
+          if ((e.target as HTMLElement).closest("button")) return;
+          draggingRef.current = true;
+          dragStartXRef.current = e.clientX;
+          dragStartOffsetRef.current = offsetRef.current;
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          if (!draggingRef.current) return;
+          const dx = e.clientX - dragStartXRef.current;
+          let next = dragStartOffsetRef.current - dx;
+          const cycle = cycleLenRef.current;
+          if (cycle > 0) next = ((next % cycle) + cycle) % cycle;
+          offsetRef.current = next;
+        }}
+        onPointerUp={(e) => {
+          draggingRef.current = false;
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch {
+            /* pointer may not be captured */
+          }
+        }}
+      >
+        <div ref={trackRef} className="flex gap-4 will-change-transform">
+          {strip("a", 0)}
+          {strip("b", items.length)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const DESKTOP_QUERY = "(min-width: 1024px)";
+
 export function HighlightedEditsGallery({
   items,
   isDark,
   sectionTitleClass,
 }: HighlightedEditsGalleryProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const stripARef = useRef<HTMLDivElement>(null);
-  const stripBRef = useRef<HTMLDivElement>(null);
-  const constraintsRef = useRef({ left: 0, right: 0 });
-  const cycleLenRef = useRef(0);
-  const mobileLayoutRef = useRef(false);
-  const hoverPausedRef = useRef(false);
-  const draggingRef = useRef(false);
-  const animatingRef = useRef(false);
-  /** True when any card has an embed locked (video playing via tap on mobile). */
-  const videoLockedRef = useRef(false);
-  const handleCardLockChange = useCallback((locked: boolean) => {
-    videoLockedRef.current = locked;
-    // Also pause hover-based auto-scroll while a video plays
-    hoverPausedRef.current = locked;
-  }, []);
-  const x = useMotionValue(0);
-  const [constraints, setConstraints] = useState({ left: 0, right: 0 });
-  const [activePhysicalIndex, setActivePhysicalIndex] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const glowLeft = useSpring(0, { stiffness: 200, damping: 28 });
-  const glowRafRef = useRef(0);
-  const lastGlowUpdateMsRef = useRef(0);
-  const GLOW_UPDATE_MIN_MS = 75;
+  const [isDesktop, setIsDesktop] = useState(false);
 
-  const updateCycleLen = useCallback(() => {
-    const a = stripARef.current;
-    const b = stripBRef.current;
-    if (!a || !b) return;
-    const period = b.offsetLeft - a.offsetLeft;
-    if (period > 0) cycleLenRef.current = period;
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    setIsDesktop(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  const measureConstraints = useCallback(() => {
-    const c = containerRef.current;
-    const t = trackRef.current;
-    if (!c || !t) return;
-    updateCycleLen();
-    const max = Math.min(0, c.clientWidth - t.scrollWidth);
-    const next = { left: max, right: 0 };
-    constraintsRef.current = next;
-    setConstraints(next);
-  }, [updateCycleLen]);
-
-  const recomputeGlow = useCallback(() => {
-    const c = containerRef.current;
-    const t = trackRef.current;
-    if (!c || !t) return;
-    const cx = c.clientWidth / 2;
-    const crect = c.getBoundingClientRect();
-    const cards = t.querySelectorAll<HTMLElement>("[data-highlight-card]");
-    let bi = 0;
-    let bestCenter = 0;
-    let bestD = Number.POSITIVE_INFINITY;
-    cards.forEach((el, pi) => {
-      const rect = el.getBoundingClientRect();
-      const center = rect.left - crect.left + rect.width / 2;
-      const d = Math.abs(center - cx);
-      if (d < bestD) {
-        bestD = d;
-        bi = pi;
-        bestCenter = center;
-      }
-    });
-    setActivePhysicalIndex(bi);
-    glowLeft.set(bestCenter - GLOW_HALF);
-  }, [glowLeft]);
-
-  const scheduleGlowRecompute = useCallback(
-    (force = false) => {
-      if (glowRafRef.current) return;
-      glowRafRef.current = window.requestAnimationFrame((ts) => {
-        glowRafRef.current = 0;
-        if (!force && ts - lastGlowUpdateMsRef.current < GLOW_UPDATE_MIN_MS) return;
-        lastGlowUpdateMsRef.current = ts;
-        recomputeGlow();
-      });
-    },
-    [recomputeGlow],
+  const visible = items.filter(
+    (it) => youtubeVideoIdFromUrl(it.href ?? "") || it.title?.trim() || it.views?.trim(),
   );
-
-  const runAnimate = useCallback(
-    (target: number) => {
-      animatingRef.current = true;
-      void animate(x, target, { type: "spring", stiffness: 340, damping: 34 }).then(() => {
-        animatingRef.current = false;
-      });
-    },
-    [x],
-  );
-
-  const slidePrev = useCallback(() => {
-    const W = cycleLenRef.current;
-    if (W <= 0) return;
-    let v = x.get() + STEP;
-    while (v > 0) v -= W;
-    runAnimate(v);
-  }, [runAnimate, x]);
-
-  const slideNext = useCallback(() => {
-    const W = cycleLenRef.current;
-    if (W <= 0) return;
-    let v = x.get() - STEP;
-    while (v <= -W) v += W;
-    runAnimate(v);
-  }, [runAnimate, x]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setReducedMotion(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const sync = () => {
-      mobileLayoutRef.current = mq.matches;
-    };
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    let rafId = 0;
-    let last = performance.now();
-    const PX_PER_MS = 0.242;
-
-    const tick = (now: number) => {
-      const dt = Math.min(48, now - last);
-      last = now;
-      const W = cycleLenRef.current;
-      if (
-        W > 0 &&
-        !mobileLayoutRef.current &&
-        !hoverPausedRef.current &&
-        !draggingRef.current &&
-        !animatingRef.current &&
-        !videoLockedRef.current
-      ) {
-        let v = x.get() - PX_PER_MS * dt;
-        while (v <= -W) v += W;
-        x.set(v);
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [reducedMotion, x]);
-
-  useLayoutEffect(() => {
-    const run = () => {
-      measureConstraints();
-      recomputeGlow();
-    };
-    run();
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(run);
-    });
-    const ro = new ResizeObserver(run);
-    if (containerRef.current) ro.observe(containerRef.current);
-    if (trackRef.current) ro.observe(trackRef.current);
-    window.addEventListener("resize", run);
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      if (glowRafRef.current) cancelAnimationFrame(glowRafRef.current);
-      ro.disconnect();
-      window.removeEventListener("resize", run);
-    };
-  }, [items.length, measureConstraints, recomputeGlow]);
-
-  useMotionValueEvent(x, "change", () => scheduleGlowRecompute(false));
+  if (visible.length === 0) return null;
 
   return (
-    <motion.section
+    <section
       id="highlighted-edits"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.12 }}
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        visible: {
-          opacity: 1,
-          y: 0,
-          transition: { duration: 1.12, ease: [0.22, 1, 0.36, 1] },
-        },
-      }}
-      className="relative left-1/2 z-10 w-screen max-w-[100vw] -translate-x-1/2 scroll-mt-28 space-y-0 overflow-x-clip"
+      className={
+        isDesktop
+          ? "relative left-1/2 z-10 w-screen max-w-[100vw] -translate-x-1/2 scroll-mt-28 overflow-x-clip"
+          : "scroll-mt-28"
+      }
       aria-labelledby="highlighted-edits-heading"
     >
-      <div className="relative z-20 mx-auto mb-4 flex max-w-6xl items-center justify-between gap-4 px-6 md:px-10">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span
-            className="h-px w-10 shrink-0 bg-white md:w-12 [box-shadow:0_1px_3px_rgba(0,0,0,0.45)]"
-            aria-hidden
-          />
-          <h3
-            id="highlighted-edits-heading"
-            className={
-              sectionTitleClass ??
-              "truncate text-xs font-semibold uppercase tracking-[0.22em] text-white title-glow-opposite-light-text md:text-sm"
-            }
-          >
-            Highlighted edits
-          </h3>
-        </div>
-        <span
-          className="shrink-0 font-mono text-xs tabular-nums tracking-widest text-white [text-shadow:0_2px_4px_rgba(0,0,0,0.5)] sm:text-sm"
-          aria-hidden
-        >
-          (01)
-        </span>
-      </div>
-
-      <div
-        ref={containerRef}
-        className="relative w-full overflow-x-clip overflow-y-visible py-4"
-        onPointerEnter={() => {
-          hoverPausedRef.current = true;
-        }}
-        onPointerLeave={() => {
-          hoverPausedRef.current = false;
-        }}
-      >
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 z-0 h-[min(360px,72vw)] w-[min(240px,62vw)] -translate-y-1/2 rounded-full opacity-45 blur-3xl md:opacity-[0.52]"
-          style={{
-            left: glowLeft,
-            background: "radial-gradient(ellipse at center, rgba(255, 145, 65, 0.55) 0%, rgba(255, 110, 35, 0.22) 48%, transparent 70%)",
-          }}
-        />
-
-        <button
-          type="button"
-          onClick={slidePrev}
-          aria-label="Show previous highlighted edits"
-          className="absolute left-2 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:bg-black/70 sm:left-4 md:left-6 md:h-11 md:w-11"
-        >
-          <ChevronLeft className="h-5 w-5 md:h-6 md:w-6" strokeWidth={2} aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={slideNext}
-          aria-label="Show next highlighted edits"
-          className="absolute right-2 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:bg-black/70 sm:right-4 md:right-6 md:h-11 md:w-11"
-        >
-          <ChevronRight className="h-5 w-5 md:h-6 md:w-6" strokeWidth={2} aria-hidden />
-        </button>
-
-        <motion.div
-          ref={trackRef}
-          className="relative z-10 flex cursor-grab select-none gap-4 pl-14 pr-14 active:cursor-grabbing sm:pl-16 sm:pr-16 md:pl-[4.5rem] md:pr-[4.5rem]"
-          style={{ x, touchAction: videoLockedRef.current ? "none" : "pan-y" }}
-          drag="x"
-          dragListener={!videoLockedRef.current}
-          dragConstraints={constraints}
-          dragElastic={0.12}
-          dragMomentum
-          dragTransition={{ bounceStiffness: 340, bounceDamping: 24, power: 0.32, min: 0, max: 0 }}
-          onDragStart={() => {
-            draggingRef.current = true;
-          }}
-          onDragEnd={() => {
-            draggingRef.current = false;
-            const W = cycleLenRef.current;
-            if (W > 0) {
-              let v = x.get();
-              while (v <= -W) v += W;
-              while (v > 0) v -= W;
-              x.set(v);
-            }
-            measureConstraints();
-            requestAnimationFrame(measureConstraints);
-          }}
-        >
-          <div ref={stripARef} className="flex shrink-0 gap-4">
-            {items.map((item, index) => (
-              <HighlightCard
-                key={`a-${item.title}-${index}`}
-                item={item}
-                physicalIndex={index}
-                visualIndex={index}
-                total={items.length}
-                isDark={isDark}
-                activePhysicalIndex={activePhysicalIndex}
-                onLockChange={handleCardLockChange}
-              />
-            ))}
-          </div>
-          <div ref={stripBRef} className="flex shrink-0 gap-4">
-            {items.map((item, index) => (
-              <HighlightCard
-                key={`b-${item.title}-${index}`}
-                item={item}
-                physicalIndex={index + items.length}
-                visualIndex={index}
-                total={items.length}
-                isDark={isDark}
-                activePhysicalIndex={activePhysicalIndex}
-                onLockChange={handleCardLockChange}
-              />
-            ))}
-          </div>
-          <div className="shrink-0" style={{ width: "min(4.5rem, 12vw)" }} aria-hidden />
-        </motion.div>
-      </div>
-    </motion.section>
+      {isDesktop ? (
+        <DesktopMarquee items={visible} isDark={isDark} sectionTitleClass={sectionTitleClass} />
+      ) : (
+        <MobileRail items={visible} isDark={isDark} sectionTitleClass={sectionTitleClass} />
+      )}
+    </section>
   );
 }
