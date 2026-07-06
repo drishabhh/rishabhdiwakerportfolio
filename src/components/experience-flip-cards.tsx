@@ -3,8 +3,8 @@
 import type { ExperienceRole as ContentExperienceRole } from "@/lib/content";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion } from "framer-motion";
-import { Clapperboard, Play } from "lucide-react";
-import { useEffect, useLayoutEffect, useState, type SyntheticEvent } from "react";
+import { Play } from "lucide-react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 
 const focusSpring = { type: "spring" as const, stiffness: 280, damping: 32, mass: 0.85 };
 const fadeSpring = { type: "spring" as const, stiffness: 320, damping: 38, mass: 0.75 };
@@ -34,23 +34,17 @@ type ExperienceCardProps = {
   isDark: boolean;
   isOpen: boolean;
   isDimmed: boolean;
-  finePointer: boolean;
   onOpen: () => void;
   onClose: () => void;
 };
 
-function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, onClose }: ExperienceCardProps) {
+function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: ExperienceCardProps) {
   const reduceMotion = useReducedMotion();
   const [embedActive, setEmbedActive] = useState(false);
   const hasMarketingLinks = Boolean(entry.marketingLinks?.length);
 
   const stopPropagation = (e: SyntheticEvent) => {
     e.stopPropagation();
-  };
-
-  const isNoInteractTarget = (target: EventTarget | null) => {
-    if (!(target instanceof HTMLElement)) return false;
-    return Boolean(target.closest('[data-no-card-activate="true"]'));
   };
 
   useEffect(() => {
@@ -60,25 +54,6 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
       setEmbedActive(false);
     }
   }, [isOpen]);
-
-  const handlePointerEnter = (target: EventTarget | null) => {
-    if (reduceMotion) return;
-    if (isNoInteractTarget(target)) return;
-    if (finePointer) onOpen();
-  };
-
-  const handlePointerLeave = () => {
-    if (finePointer) onClose();
-  };
-
-  const handleCardClick = (target: EventTarget | null) => {
-    if (reduceMotion) return;
-    if (isNoInteractTarget(target)) return;
-    if (!finePointer) {
-      if (isOpen) onClose();
-      else onOpen();
-    }
-  };
 
   const embedSrc = embedActive ? buildEmbedUrl(roleVideoId(entry), entry.embedStart) : undefined;
 
@@ -147,7 +122,7 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
           rel="noopener noreferrer"
           className="mt-auto inline-flex items-center gap-2 pt-6 text-sm font-medium text-orange-600 underline-offset-4 hover:underline"
         >
-          Watch sample reel
+          Click here to watch
         </a>
       </article>
     );
@@ -164,34 +139,8 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
       transition={isOpen ? focusSpring : fadeSpring}
       style={{ transformOrigin: "center center" }}
     >
-      <div
-        className="relative h-[min(100%,380px)] min-h-[320px] w-full md:min-h-[360px]"
-        onPointerEnter={(e) => handlePointerEnter(e.target)}
-        onPointerLeave={handlePointerLeave}
-        onPointerMove={(e) => {
-          if (reduceMotion || !finePointer) return;
-          if (!isNoInteractTarget(e.target)) onOpen();
-        }}
-        onClick={(e) => handleCardClick(e.target)}
-        onKeyDown={(e) => {
-          if (reduceMotion) return;
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          if (isNoInteractTarget(e.target)) return;
-          if (!finePointer) {
-            if (isOpen) onClose();
-            else onOpen();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-label={`${entry.company}, ${entry.role}. ${isOpen ? "Showing reel" : "Hover or tap to watch"}`}
-      >
-        <div
-          className={`relative h-full w-full cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 focus-visible:ring-offset-2 ${
-            isDark ? "focus-visible:ring-offset-zinc-950" : "focus-visible:ring-offset-zinc-100"
-          }`}
-        >
+      <div className="relative h-[min(100%,380px)] min-h-[320px] w-full md:min-h-[360px]">
+        <div className="relative h-full w-full rounded-2xl">
           {/* Front */}
           <div
             className={`absolute inset-0 z-[1] flex flex-col rounded-2xl border p-6 transition-opacity duration-300 ease-out md:p-7 ${
@@ -211,29 +160,13 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
               }}
             />
             <div className="relative flex h-full flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <p
-                  className={`min-w-0 pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-                    isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
-                  }`}
-                >
-                  {entry.dateRange}
-                </p>
-                <div
-                  className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider shadow-sm backdrop-blur-sm md:text-[11px] ${
-                    isDark
-                      ? "border-white/15 bg-white/10 text-white/90"
-                      : "border-zinc-200/90 bg-white/90 text-zinc-600"
-                  }`}
-                >
-                  <Clapperboard
-                    className={`h-3.5 w-3.5 shrink-0 ${isDark ? "text-orange-400" : "text-orange-500"}`}
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                  <span className="whitespace-nowrap">Watch reel</span>
-                </div>
-              </div>
+              <p
+                className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+                  isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
+                }`}
+              >
+                {entry.dateRange}
+              </p>
               <h3
                 className={`mt-4 max-w-full font-serif text-2xl font-bold leading-tight tracking-tight md:mt-5 md:text-[1.75rem] md:font-extrabold ${
                   isDark ? "text-white title-glow-opposite-light-text" : "text-black title-glow-opposite-dark-text"
@@ -249,9 +182,28 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
                 {entry.role}
               </p>
               {marketingLinksBlock}
+              <div className="flex flex-1 items-center justify-center py-6">
+                <button
+                  type="button"
+                  data-no-card-activate="true"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                  }}
+                  onPointerDown={stopPropagation}
+                  className={`inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] shadow-sm transition-all duration-200 hover:scale-[1.03] md:text-[11px] ${
+                    isDark
+                      ? "border-orange-400/50 bg-orange-500/15 text-orange-200 hover:border-orange-400 hover:bg-orange-500/25 hover:shadow-[0_0_20px_rgba(249,115,22,0.35)]"
+                      : "border-orange-400/70 bg-white text-zinc-900 hover:border-orange-500 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)]"
+                  }`}
+                >
+                  <Play className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
+                  Click here to watch
+                </button>
+              </div>
               {!hasMarketingLinks ? (
                 <p
-                  className={`mt-auto max-w-[20rem] pt-8 text-xs leading-relaxed md:text-sm ${
+                  className={`max-w-[20rem] text-xs leading-relaxed md:text-sm ${
                     isDark ? "text-zinc-300" : "text-zinc-500"
                   }`}
                 >
@@ -267,7 +219,7 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, finePointer, onOpen, 
               isOpen ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
           >
-            {!finePointer && isOpen ? (
+            {isOpen ? (
               <button
                 type="button"
                 className="absolute right-3 top-3 z-[60] rounded-full border border-white/30 bg-black/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white backdrop-blur-md"
@@ -304,11 +256,6 @@ export type ExperienceFlipCardsProps = {
 
 export function ExperienceFlipCards({ isDark, roles }: ExperienceFlipCardsProps) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
-  const [finePointer, setFinePointer] = useState(false);
-
-  useLayoutEffect(() => {
-    setFinePointer(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
-  }, []);
 
   return (
     <div className="grid gap-6 overflow-visible md:grid-cols-3 md:gap-5">
@@ -323,7 +270,6 @@ export function ExperienceFlipCards({ isDark, roles }: ExperienceFlipCardsProps)
             isDark={isDark}
             isOpen={isOpen}
             isDimmed={isDimmed}
-            finePointer={finePointer}
             onOpen={() => setOpenCardId(entry.id)}
             onClose={() => setOpenCardId((id) => (id === entry.id ? null : id))}
           />

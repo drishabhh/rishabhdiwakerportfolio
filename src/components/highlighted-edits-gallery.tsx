@@ -4,8 +4,50 @@ import Image from "next/image";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
-type PlayerCommand = "mute" | "unMute" | "pauseVideo" | "playVideo";
+type PlayerCommand = "mute" | "unMute" | "pauseVideo" | "playVideo" | "seekTo";
+
+const YT_ORIGIN = "https://www.youtube.com";
+
+/** iOS / touch browsers rarely support element fullscreen — use cinema overlay instead. */
+function prefersCinemaFullscreen(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(max-width: 1023px)").matches
+  );
+}
+
+type FullscreenCapableElement = HTMLDivElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+async function requestElementFullscreen(el: HTMLElement) {
+  const target = el as FullscreenCapableElement;
+  const req =
+    target.requestFullscreen?.bind(target) ??
+    target.webkitRequestFullscreen?.bind(target);
+  if (!req) throw new Error("Fullscreen API unavailable");
+  await req();
+}
+
+function exitElementFullscreen() {
+  const doc = document as Document & { webkitExitFullscreen?: () => Promise<void> | void };
+  if (document.fullscreenElement) {
+    return document.exitFullscreen().catch(() => {});
+  }
+  if (doc.webkitExitFullscreen) {
+    return Promise.resolve(doc.webkitExitFullscreen()).catch(() => {});
+  }
+  return Promise.resolve();
+}
+
+function isCardFullscreen(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  const doc = document as Document & { webkitFullscreenElement?: Element | null };
+  return document.fullscreenElement === el || doc.webkitFullscreenElement === el;
+}
 
 function embedSrc(videoId: string, muted: boolean, startSeconds?: number): string {
   const params = new URLSearchParams({
@@ -17,6 +59,10 @@ function embedSrc(videoId: string, muted: boolean, startSeconds?: number): strin
     controls: "0",
     enablejsapi: "1",
   });
+  if (videoId) {
+    params.set("loop", "1");
+    params.set("playlist", videoId);
+  }
   if (startSeconds != null && startSeconds > 0) {
     params.set("start", String(Math.floor(startSeconds)));
   }
@@ -26,11 +72,27 @@ function embedSrc(videoId: string, muted: boolean, startSeconds?: number): strin
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
-function postToPlayer(iframe: HTMLIFrameElement | null, command: PlayerCommand) {
+function postToPlayer(
+  iframe: HTMLIFrameElement | null,
+  command: PlayerCommand,
+  args: (number | boolean)[] = [],
+) {
   iframe?.contentWindow?.postMessage(
-    JSON.stringify({ event: "command", func: command, args: [] }),
-    "*",
+    JSON.stringify({ event: "command", func: command, args }),
+    YT_ORIGIN,
   );
+}
+
+function listenToPlayer(iframe: HTMLIFrameElement | null) {
+  iframe?.contentWindow?.postMessage(JSON.stringify({ event: "listening" }), YT_ORIGIN);
+}
+
+/** Kick playback after the embed is ready — onLoad alone is often too early on mobile. */
+function kickPlayback(iframe: HTMLIFrameElement | null, muted: boolean) {
+  if (!iframe) return;
+  listenToPlayer(iframe);
+  postToPlayer(iframe, "playVideo");
+  postToPlayer(iframe, muted ? "mute" : "unMute");
 }
 
 export type HighlightEditItem = {
@@ -62,7 +124,14 @@ type CardProps = {
   isDark: boolean;
   muted: boolean;
   playbackPaused: boolean;
-  onOpen: (index: number) => void;
+  /** When set, skip open if the marquee just finished a drag. */
+  dragGuardRef?: React.MutableRefObject<boolean>;
+  /** Mobile rail: cinema fullscreen + always-visible control buttons. */
+  touchUi?: boolean;
+  onPointerEnterCard?: () => void;
+  onPointerLeaveCard?: () => void;
+  onExpandedChange?: (expanded: boolean) => void;
+  onOpen: () => void;
   onClose: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -71,11 +140,16 @@ type CardProps = {
 
 function HighlightCard({
   item,
-  index,
+  index: _index,
   isActive,
   isDark,
   muted,
   playbackPaused,
+  dragGuardRef,
+  touchUi = false,
+  onPointerEnterCard,
+  onPointerLeaveCard,
+  onExpandedChange,
   onOpen,
   onClose,
   onPause,
@@ -89,6 +163,9 @@ function HighlightCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const ignoreEndRef = useRef(false);
   const wasPausedRef = useRef(false);
+  const playbackKickTimersRef = useRef<number[]>([]);
+  const mutedRef = useRef(muted);
+  const playbackPausedRef = useRef(playbackPaused);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeMounted = isActive && Boolean(videoId);
@@ -105,6 +182,31 @@ function HighlightCard({
     return embedSrc(videoId, true);
   }, [iframeMounted, videoId]);
 
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
+
+  useEffect(() => {
+    playbackPausedRef.current = playbackPaused;
+  }, [playbackPaused]);
+
+  const clearPlaybackKickTimers = useCallback(() => {
+    playbackKickTimersRef.current.forEach((id) => window.clearTimeout(id));
+    playbackKickTimersRef.current = [];
+  }, []);
+
+  const schedulePlaybackKick = useCallback(
+    (iframe: HTMLIFrameElement | null, delayMs = 0) => {
+      const id = window.setTimeout(() => {
+        if (!playbackPausedRef.current) {
+          kickPlayback(iframe, mutedRef.current);
+        }
+      }, delayMs);
+      playbackKickTimersRef.current.push(id);
+    },
+    [],
+  );
+
   const clearHideTimer = useCallback(() => {
     if (hideControlsTimerRef.current) {
       clearTimeout(hideControlsTimerRef.current);
@@ -114,24 +216,49 @@ function HighlightCard({
 
   const scheduleHideControls = useCallback(() => {
     clearHideTimer();
-    if (!playing || playbackPaused) return;
+    if (touchUi || !playing || playbackPaused) return;
     hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
-  }, [playing, playbackPaused, clearHideTimer]);
+  }, [playing, playbackPaused, clearHideTimer, touchUi]);
 
   useEffect(() => {
-    const onFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === cardRef.current);
+    const sync = () => setIsFullscreen(isCardFullscreen(cardRef.current));
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
     };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    onExpandedChange?.(expanded);
+  }, [expanded, onExpandedChange]);
+
+  /** Reparent to body so fixed cinema overlay escapes overflow-x rail clipping on mobile. */
+  useEffect(() => {
+    if (!cinemaMode) return;
+    const el = cardRef.current;
+    if (!el?.parentElement) return;
+
+    const parent = el.parentElement;
+    const placeholder = document.createComment("highlight-cinema-anchor");
+    parent.insertBefore(placeholder, el);
+    document.body.appendChild(el);
+
+    return () => {
+      if (placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(el, placeholder);
+        placeholder.remove();
+      }
+    };
+  }, [cinemaMode]);
 
   useEffect(() => {
     if (!isActive) {
       wasPausedRef.current = false;
       setCinemaMode(false);
-      if (document.fullscreenElement === cardRef.current) {
-        document.exitFullscreen().catch(() => {});
+      if (isCardFullscreen(cardRef.current)) {
+        exitElementFullscreen();
       }
     }
   }, [isActive]);
@@ -187,9 +314,13 @@ function HighlightCard({
     }
   };
 
-  const showControls = playbackPaused || !playing || controlsVisible;
+  const showControls = playbackPaused || !playing || controlsVisible || touchUi || cinemaMode;
   const controlsOpacityClass = showControls ? "opacity-100" : "opacity-0";
   const controlHitClass = showControls ? "pointer-events-auto" : "pointer-events-none";
+  const topBarPinned = touchUi || cinemaMode;
+  const topBarClass = topBarPinned
+    ? "opacity-100 pointer-events-auto"
+    : `${controlsOpacityClass} ${controlHitClass}`;
   const centerShowsPlay = playbackPaused;
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -201,7 +332,7 @@ function HighlightCard({
   const handleTouchEnd = (e: React.TouchEvent) => {
     const start = touchStartRef.current;
     touchStartRef.current = null;
-    if (!start || !playing || playbackPaused || showControls) return;
+    if (!start) return;
     const touch = e.changedTouches[0];
     if (!touch) return;
     const dx = Math.abs(touch.clientX - start.x);
@@ -212,6 +343,7 @@ function HighlightCard({
   useEffect(() => {
     if (!iframeMounted) {
       setProgress(0);
+      clearPlaybackKickTimers();
       return;
     }
 
@@ -223,8 +355,22 @@ function HighlightCard({
       } catch {
         return;
       }
+      if (data.event === "onReady" && !playbackPausedRef.current) {
+        kickPlayback(iframeRef.current, mutedRef.current);
+      }
+      if (
+        data.event === "onStateChange" &&
+        data.info === 2 &&
+        !playbackPausedRef.current &&
+        !wasPausedRef.current
+      ) {
+        postToPlayer(iframeRef.current, "playVideo");
+      }
       if (data.event === "onStateChange" && data.info === 0 && !ignoreEndRef.current) {
-        onClose();
+        if (playbackPausedRef.current || wasPausedRef.current) return;
+        postToPlayer(iframeRef.current, "seekTo", [0, true]);
+        postToPlayer(iframeRef.current, "playVideo");
+        setProgress(0);
       }
       if (data.event === "infoDelivery" && data.info && typeof data.info === "object") {
         const { currentTime = 0, duration = 0 } = data.info;
@@ -233,8 +379,26 @@ function HighlightCard({
     };
 
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [iframeMounted, onClose]);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      clearPlaybackKickTimers();
+    };
+  }, [iframeMounted, onClose, clearPlaybackKickTimers]);
+
+  useEffect(() => {
+    if (!iframeMounted) return;
+    listenToPlayer(iframeRef.current);
+    if (playbackPaused) {
+      postToPlayer(iframeRef.current, "pauseVideo");
+      wasPausedRef.current = true;
+      return;
+    }
+    wasPausedRef.current = false;
+    kickPlayback(iframeRef.current, muted);
+    schedulePlaybackKick(iframeRef.current, 200);
+    schedulePlaybackKick(iframeRef.current, 600);
+    schedulePlaybackKick(iframeRef.current, 1200);
+  }, [iframeMounted, playbackPaused, muted, schedulePlaybackKick]);
 
   useEffect(() => {
     if (!iframeMounted) return;
@@ -242,14 +406,10 @@ function HighlightCard({
   }, [muted, iframeMounted]);
 
   useEffect(() => {
-    if (!iframeMounted) return;
-    if (playbackPaused) {
-      postToPlayer(iframeRef.current, "pauseVideo");
-      wasPausedRef.current = true;
-    } else if (wasPausedRef.current) {
-      postToPlayer(iframeRef.current, "playVideo");
-      wasPausedRef.current = false;
-    }
+    if (!iframeMounted || playbackPaused) return;
+    if (!wasPausedRef.current) return;
+    postToPlayer(iframeRef.current, "playVideo");
+    wasPausedRef.current = false;
   }, [playbackPaused, iframeMounted]);
 
   const handleCenterPlay = (e: React.SyntheticEvent) => {
@@ -257,7 +417,7 @@ function HighlightCard({
     e.stopPropagation();
     (e.currentTarget as HTMLButtonElement).blur();
     bumpControlsTimer();
-    postToPlayer(iframeRef.current, "playVideo");
+    kickPlayback(iframeRef.current, mutedRef.current);
     wasPausedRef.current = false;
     onResume();
   };
@@ -294,9 +454,7 @@ function HighlightCard({
     e.preventDefault();
     e.stopPropagation();
     setCinemaMode(false);
-    if (document.fullscreenElement === cardRef.current) {
-      document.exitFullscreen().catch(() => {});
-    }
+    exitElementFullscreen();
     ignoreEndRef.current = true;
     onClose();
     window.setTimeout(() => {
@@ -306,9 +464,7 @@ function HighlightCard({
 
   const exitExpanded = useCallback(async () => {
     setCinemaMode(false);
-    if (document.fullscreenElement === cardRef.current) {
-      await document.exitFullscreen().catch(() => {});
-    }
+    await exitElementFullscreen();
   }, []);
 
   const toggleFullscreen = async (e: React.SyntheticEvent) => {
@@ -316,16 +472,23 @@ function HighlightCard({
     e.stopPropagation();
     (e.currentTarget as HTMLButtonElement).blur();
     bumpControlsTimer();
-    const el = cardRef.current;
-    if (!el) return;
+    setControlsVisible(true);
 
     if (expanded) {
       await exitExpanded();
       return;
     }
 
+    if (touchUi || prefersCinemaFullscreen()) {
+      flushSync(() => setCinemaMode(true));
+      return;
+    }
+
+    const el = cardRef.current;
+    if (!el) return;
+
     try {
-      await el.requestFullscreen();
+      await requestElementFullscreen(el);
     } catch {
       setCinemaMode(true);
     }
@@ -336,28 +499,32 @@ function HighlightCard({
   const bracketColor = isDark ? "border-white/35" : "border-black/35";
   const corner = `pointer-events-none absolute h-4 w-4 ${bracketColor} z-20 transition-opacity duration-300`;
 
+  const railShellClass = `group relative aspect-[9/16] w-[200px] shrink-0 snap-center overflow-hidden rounded-2xl sm:w-[220px] ${
+    isDark ? "bg-white/5" : "bg-black/5"
+  }`;
+  const cinemaShellClass =
+    "!fixed !inset-0 !z-[200] !m-0 flex !h-dvh !w-dvw !max-w-none !shrink-0 items-center justify-center !rounded-none bg-black";
+
   return (
     <div
       ref={cardRef}
-      className={`group relative aspect-[9/16] w-[200px] shrink-0 snap-center overflow-hidden rounded-2xl sm:w-[220px] ${
-        isDark ? "bg-white/5" : "bg-black/5"
-      } ${
-        cinemaMode
-          ? "fixed inset-0 z-[100] flex h-dvh w-dvw max-w-none items-center justify-center rounded-none bg-black"
-          : ""
-      } fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
+      onPointerEnter={onPointerEnterCard}
+      onPointerLeave={onPointerLeaveCard}
+      className={`${cinemaMode ? cinemaShellClass : railShellClass} fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
     >
       <div
-        className={`relative h-full w-full overflow-hidden rounded-2xl ${
-          expanded
-            ? "aspect-[9/16] h-full max-h-dvh w-auto max-w-[min(100vw,calc(100dvh*9/16))] rounded-none"
-            : "h-full w-full"
+        className={`relative h-full w-full overflow-hidden ${
+          cinemaMode
+            ? "aspect-[9/16] h-[100dvh] max-h-[100dvh] w-auto max-w-[100vw] rounded-none"
+            : expanded
+              ? "aspect-[9/16] h-full max-h-dvh w-auto max-w-[min(100vw,calc(100dvh*9/16))] rounded-none"
+              : "h-full w-full rounded-2xl"
         } fullscreen:aspect-[9/16] fullscreen:h-full fullscreen:max-h-dvh fullscreen:w-auto fullscreen:max-w-[min(100vw,calc(100dvh*9/16))] fullscreen:rounded-none`}
         onMouseEnter={handlePointerMove}
         onMouseMove={handlePointerMove}
         onMouseLeave={handlePointerLeave}
-        onTouchStart={playing ? handleTouchStart : undefined}
-        onTouchEnd={playing ? handleTouchEnd : undefined}
+        onTouchStart={isActive ? handleTouchStart : undefined}
+        onTouchEnd={isActive ? handleTouchEnd : undefined}
       >
       {!expanded ? (
         <>
@@ -380,12 +547,10 @@ function HighlightCard({
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               onLoad={() => {
-                iframeRef.current?.contentWindow?.postMessage(
-                  JSON.stringify({ event: "listening" }),
-                  "*",
-                );
-                postToPlayer(iframeRef.current, "playVideo");
-                postToPlayer(iframeRef.current, muted ? "mute" : "unMute");
+                listenToPlayer(iframeRef.current);
+                if (!playbackPausedRef.current) {
+                  kickPlayback(iframeRef.current, mutedRef.current);
+                }
               }}
             />
           ) : null}
@@ -409,52 +574,63 @@ function HighlightCard({
                 <Pause className="h-6 w-6" fill="currentColor" />
               )}
             </button>
+          </div>
 
-            <div className={`absolute right-2 top-2 flex gap-2 ${controlHitClass}`}>
-              <button
-                type="button"
-                aria-label={muted ? "Unmute" : "Mute"}
-                onClick={handleToggleMute}
-                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
-              >
-                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                aria-label={expanded ? "Exit fullscreen" : "Enter fullscreen"}
-                onClick={toggleFullscreen}
-                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
-              >
-                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                aria-label="Close video"
-                onClick={handleClose}
-                className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/45 text-white/80 shadow-lg backdrop-blur transition-colors hover:bg-black/75 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+          <div className={`absolute right-2 top-2 z-40 flex gap-2 transition-opacity duration-300 ${topBarClass}`}>
+            <button
+              type="button"
+              aria-label={muted ? "Unmute" : "Mute"}
+              onClick={handleToggleMute}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
+            >
+              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              aria-label={expanded ? "Exit fullscreen" : "Enter fullscreen"}
+              onClick={toggleFullscreen}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
+            >
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              aria-label="Close video"
+              onClick={handleClose}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/45 text-white/80 shadow-lg backdrop-blur transition-colors hover:bg-black/75 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-            <div className="absolute inset-x-0 bottom-0 h-1 bg-white/15">
-              <div
-                className="h-full bg-white transition-[width] duration-200 ease-linear"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+          <div
+            className={`pointer-events-none absolute inset-x-0 bottom-0 z-40 h-1 bg-white/15 transition-opacity duration-300 ${controlsOpacityClass}`}
+          >
+            <div
+              className="h-full bg-white transition-[width] duration-200 ease-linear"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </>
       ) : (
         <div
           role={playable ? "button" : undefined}
           tabIndex={playable ? 0 : undefined}
-          onClick={() => playable && onOpen(index)}
+          onClick={() => {
+            if (dragGuardRef?.current) {
+              dragGuardRef.current = false;
+              return;
+            }
+            if (playable) onOpen();
+          }}
           onKeyDown={(e) => {
             if (!playable) return;
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              onOpen(index);
+              onOpen();
             }
           }}
           className={`absolute inset-0 h-full w-full ${playable ? "cursor-pointer" : ""}`}
@@ -593,7 +769,26 @@ function GalleryHeader({
   return <div className="relative z-30 flex items-end justify-between">{inner}</div>;
 }
 
-function MobileRail({
+const CARD_STEP = 220 + 16;
+const MARQUEE_SPEED_PX_PER_SEC = 72;
+/** Left/right edge of the track — cursor here drives scroll direction. */
+const MARQUEE_EDGE_RATIO = 0.2;
+const MARQUEE_EDGE_SPEED = 0.85;
+const MARQUEE_DRAG_THRESHOLD_PX = 6;
+
+type StripId = "a" | "b";
+
+function marqueeSlot(strip: StripId, index: number): string {
+  return `${strip}-${index}`;
+}
+
+function parseMarqueeSlot(slot: string): { strip: StripId; index: number } | null {
+  const match = slot.match(/^(a|b)-(\d+)$/);
+  if (!match?.[1] || match[2] === undefined) return null;
+  return { strip: match[1] as StripId, index: Number(match[2]) };
+}
+
+function HighlightRail({
   items,
   isDark,
   sectionTitleClass,
@@ -603,6 +798,7 @@ function MobileRail({
   sectionTitleClass?: string;
 }) {
   const railRef = useRef<HTMLDivElement>(null);
+  const expandedLockRef = useRef(false);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [playbackPaused, setPlaybackPaused] = useState(false);
@@ -613,10 +809,13 @@ function MobileRail({
   }, []);
 
   const open = useCallback((index: number) => {
-    setMuted(false);
-    setPlaybackPaused(false);
-    setActiveId(index);
-  }, []);
+    if (index < 0 || index >= items.length) return;
+    flushSync(() => {
+      setMuted(true);
+      setPlaybackPaused(false);
+      setActiveId(index);
+    });
+  }, [items.length]);
 
   const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
   const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
@@ -627,11 +826,15 @@ function MobileRail({
       const rail = railRef.current;
       if (!rail) return;
       requestAnimationFrame(() => {
-        rail.scrollBy({ left: dir * 236, behavior: "smooth" });
+        rail.scrollBy({ left: dir * CARD_STEP, behavior: "smooth" });
       });
     },
     [close],
   );
+
+  useEffect(() => {
+    if (activeId !== null && activeId >= items.length) close();
+  }, [activeId, items.length, close]);
 
   useEffect(() => {
     const rail = railRef.current;
@@ -639,6 +842,7 @@ function MobileRail({
 
     let lastLeft = rail.scrollLeft;
     const onScroll = () => {
+      if (expandedLockRef.current) return;
       if (playbackPaused) return;
       const moved = Math.abs(rail.scrollLeft - lastLeft);
       lastLeft = rail.scrollLeft;
@@ -664,7 +868,7 @@ function MobileRail({
       />
       <div
         ref={railRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden pb-4 overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
           <div key={`${item.href ?? item.title}-${index}`} data-card className="shrink-0">
@@ -675,7 +879,11 @@ function MobileRail({
               isDark={isDark}
               muted={muted}
               playbackPaused={activeId === index && playbackPaused}
-              onOpen={open}
+              touchUi
+              onExpandedChange={(exp) => {
+                expandedLockRef.current = exp;
+              }}
+              onOpen={() => open(index)}
               onClose={close}
               onPause={pausePlayback}
               onResume={resumePlayback}
@@ -688,10 +896,6 @@ function MobileRail({
   );
 }
 
-const CARD_STEP = 220 + 16;
-/** Desktop auto-marquee only — mobile uses native swipe scroll (unchanged). */
-const MARQUEE_SPEED_PX_PER_SEC = 72;
-
 function DesktopMarquee({
   items,
   isDark,
@@ -702,31 +906,67 @@ function DesktopMarquee({
   sectionTitleClass?: string;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
-  const cycleLenRef = useRef(items.length * CARD_STEP);
-  // 1 = full speed, 0 = stopped. Lerped every frame instead of snapping —
-  // an instant stop reads as a glitch, a deceleration reads as intentional.
+  const cycleLenRef = useRef(Math.max(items.length * CARD_STEP, 1));
   const speedTargetRef = useRef(1);
   const speedRef = useRef(1);
   const hoveredRef = useRef(false);
+  const dragGuardRef = useRef(false);
   const draggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartOffsetRef = useRef(0);
+  const slotExpandedRef = useRef<Record<string, boolean>>({});
 
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
   const [playbackPaused, setPlaybackPaused] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const itemCount = items.length;
 
   useEffect(() => {
-    cycleLenRef.current = items.length * CARD_STEP || 1;
-  }, [items.length]);
+    cycleLenRef.current = Math.max(itemCount * CARD_STEP, 1);
+    if (activeSlot !== null) {
+      const parsed = parseMarqueeSlot(activeSlot);
+      if (!parsed || parsed.index >= itemCount) {
+        setActiveSlot(null);
+        setPlaybackPaused(false);
+      }
+    }
+    const cycle = cycleLenRef.current;
+    if (cycle > 0) {
+      offsetRef.current = ((offsetRef.current % cycle) + cycle) % cycle;
+    }
+  }, [itemCount, activeSlot]);
 
-  // Keep the lerp target in sync with whether a video is open. If a video
-  // closes while the cursor happens to still be hovering, stay paused
-  // rather than snapping back to full speed.
   useEffect(() => {
-    speedTargetRef.current = activeId !== null || hoveredRef.current ? 0 : 1;
-  }, [activeId]);
+    if (activeSlot !== null) {
+      speedTargetRef.current = 0;
+      return;
+    }
+    if (!hoveredRef.current) speedTargetRef.current = 1;
+  }, [activeSlot]);
+
+  const wrapOffset = useCallback((next: number) => {
+    const cycle = cycleLenRef.current;
+    if (cycle <= 0) return 0;
+    return ((next % cycle) + cycle) % cycle;
+  }, []);
+
+  const updateEdgeScrollTarget = useCallback((clientX: number) => {
+    if (activeSlot !== null || draggingRef.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ratio = (clientX - rect.left) / rect.width;
+    if (ratio < MARQUEE_EDGE_RATIO) {
+      speedTargetRef.current = -MARQUEE_EDGE_SPEED;
+    } else if (ratio > 1 - MARQUEE_EDGE_RATIO) {
+      speedTargetRef.current = MARQUEE_EDGE_SPEED;
+    } else {
+      speedTargetRef.current = 0;
+    }
+  }, [activeSlot]);
 
   useEffect(() => {
     let raf = 0;
@@ -736,15 +976,13 @@ function DesktopMarquee({
       const dt = (now - last) / 1000;
       last = now;
 
-      // Ease the current speed toward the target every frame — this is
-      // the "decelerate, don't snap" feel.
-      const lerpRate = 1 - Math.pow(0.001, dt); // ~300ms to settle
+      const lerpRate = 1 - Math.pow(0.001, dt);
       speedRef.current += (speedTargetRef.current - speedRef.current) * lerpRate;
 
-      if (!draggingRef.current && speedRef.current > 0.001) {
-        offsetRef.current += MARQUEE_SPEED_PX_PER_SEC * speedRef.current * dt;
-        const cycle = cycleLenRef.current;
-        if (cycle > 0) offsetRef.current = ((offsetRef.current % cycle) + cycle) % cycle;
+      if (!draggingRef.current && Math.abs(speedRef.current) > 0.001) {
+        offsetRef.current = wrapOffset(
+          offsetRef.current + MARQUEE_SPEED_PX_PER_SEC * speedRef.current * dt,
+        );
       }
 
       if (trackRef.current) {
@@ -755,50 +993,86 @@ function DesktopMarquee({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [wrapOffset]);
 
   const nudge = useCallback((dir: 1 | -1) => {
-    setActiveId(null);
+    setActiveSlot(null);
     setPlaybackPaused(false);
-    offsetRef.current += dir * CARD_STEP;
-    const cycle = cycleLenRef.current;
-    if (cycle > 0) offsetRef.current = ((offsetRef.current % cycle) + cycle) % cycle;
-  }, []);
+    offsetRef.current = wrapOffset(offsetRef.current + dir * CARD_STEP);
+  }, [wrapOffset]);
 
-  const open = useCallback((index: number) => {
-    setMuted(false);
-    setPlaybackPaused(false);
-    setActiveId(index);
-  }, []);
+  const open = useCallback(
+    (strip: StripId, index: number) => {
+      if (index < 0 || index >= itemCount) return;
+      flushSync(() => {
+        setMuted(true);
+        setPlaybackPaused(false);
+        setActiveSlot(marqueeSlot(strip, index));
+      });
+    },
+    [itemCount],
+  );
 
   const close = useCallback(() => {
-    setActiveId(null);
+    setActiveSlot(null);
     setPlaybackPaused(false);
   }, []);
 
   const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
   const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
 
-  if (items.length === 0) return null;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  const strip = (copyKey: string, indexOffset: number) =>
-    items.map((item, i) => (
-      <div key={`${copyKey}-${item.href ?? item.title}-${i}`} className="shrink-0">
-        <HighlightCard
-          item={item}
-          index={i + indexOffset}
-          isActive={activeId === i + indexOffset}
-          isDark={isDark}
-          muted={muted}
-          playbackPaused={activeId === i + indexOffset && playbackPaused}
-          onOpen={open}
-          onClose={close}
-          onPause={pausePlayback}
-          onResume={resumePlayback}
-          onToggleMute={() => setMuted((m) => !m)}
-        />
-      </div>
-    ));
+    const onWheel = (e: WheelEvent) => {
+      if (activeSlot !== null) return;
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (delta === 0) return;
+      e.preventDefault();
+      speedTargetRef.current = 0;
+      offsetRef.current = wrapOffset(offsetRef.current + delta);
+    };
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [activeSlot, wrapOffset]);
+
+  if (itemCount === 0) return null;
+
+  const strip = (copyKey: StripId) =>
+    items.map((item, i) => {
+      const slot = marqueeSlot(copyKey, i);
+      const canPlay = Boolean(youtubeVideoIdFromUrl(item.href ?? ""));
+      return (
+        <div key={`${copyKey}-${item.href ?? item.title}-${i}`} className="shrink-0">
+          <HighlightCard
+            item={item}
+            index={i}
+            isActive={activeSlot === slot}
+            isDark={isDark}
+            muted={muted}
+            playbackPaused={activeSlot === slot && playbackPaused}
+            dragGuardRef={dragGuardRef}
+            onPointerEnterCard={() => {
+              if (draggingRef.current || dragGuardRef.current || !canPlay) return;
+              open(copyKey, i);
+            }}
+            onPointerLeaveCard={() => {
+              if (activeSlot === slot && !slotExpandedRef.current[slot]) close();
+            }}
+            onExpandedChange={(exp) => {
+              slotExpandedRef.current[slot] = exp;
+            }}
+            onOpen={() => open(copyKey, i)}
+            onClose={close}
+            onPause={pausePlayback}
+            onResume={resumePlayback}
+            onToggleMute={() => setMuted((m) => !m)}
+          />
+        </div>
+      );
+    });
 
   return (
     <div className="space-y-5">
@@ -811,44 +1085,80 @@ function DesktopMarquee({
       />
 
       <div
-        className="relative w-full overflow-hidden py-4"
+        ref={containerRef}
+        className={`relative w-full overflow-hidden py-4 select-none ${
+          activeSlot ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
+        }`}
         onMouseEnter={() => {
           hoveredRef.current = true;
-          if (activeId === null) speedTargetRef.current = 0;
+          if (activeSlot === null) speedTargetRef.current = 0;
         }}
         onMouseLeave={() => {
           hoveredRef.current = false;
           draggingRef.current = false;
-          if (activeId === null) speedTargetRef.current = 1;
+          setIsDragging(false);
+          if (activeSlot === null) speedTargetRef.current = 1;
         }}
-        onPointerDown={(e) => {
-          if (activeId !== null) return;
+        onPointerDownCapture={(e) => {
+          if (activeSlot !== null) return;
+          if (e.button !== 0) return;
           if ((e.target as HTMLElement).closest("button")) return;
-          draggingRef.current = true;
+
+          draggingRef.current = false;
+          setIsDragging(false);
+          dragGuardRef.current = false;
           dragStartXRef.current = e.clientX;
           dragStartOffsetRef.current = offsetRef.current;
-          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          speedTargetRef.current = 0;
         }}
         onPointerMove={(e) => {
-          if (!draggingRef.current) return;
-          const dx = e.clientX - dragStartXRef.current;
-          let next = dragStartOffsetRef.current - dx;
-          const cycle = cycleLenRef.current;
-          if (cycle > 0) next = ((next % cycle) + cycle) % cycle;
-          offsetRef.current = next;
+          if (activeSlot !== null) return;
+
+          if (e.buttons === 1) {
+            const dx = e.clientX - dragStartXRef.current;
+            if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
+              draggingRef.current = true;
+              dragGuardRef.current = true;
+              setIsDragging(true);
+              close();
+            }
+            if (draggingRef.current) {
+              offsetRef.current = wrapOffset(dragStartOffsetRef.current - dx);
+            }
+            return;
+          }
+
+          updateEdgeScrollTarget(e.clientX);
+        }}
+        onPointerDown={(e) => {
+          if (activeSlot !== null) return;
+          if (e.button !== 0) return;
+          if ((e.target as HTMLElement).closest("button")) return;
+          dragStartXRef.current = e.clientX;
+          dragStartOffsetRef.current = offsetRef.current;
         }}
         onPointerUp={(e) => {
+          const wasDragging = draggingRef.current;
           draggingRef.current = false;
-          try {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-          } catch {
-            /* pointer may not be captured */
+          setIsDragging(false);
+          if (activeSlot === null) {
+            if (wasDragging) {
+              speedTargetRef.current = 0;
+            } else if (hoveredRef.current) {
+              updateEdgeScrollTarget(e.clientX);
+            } else {
+              speedTargetRef.current = 1;
+            }
           }
+        }}
+        onPointerCancel={() => {
+          draggingRef.current = false;
+          setIsDragging(false);
         }}
       >
         <div ref={trackRef} className="flex gap-4 will-change-transform">
-          {strip("a", 0)}
-          {strip("b", items.length)}
+          {strip("a")}
+          {strip("b")}
         </div>
       </div>
     </div>
@@ -890,7 +1200,7 @@ export function HighlightedEditsGallery({
       {isDesktop ? (
         <DesktopMarquee items={visible} isDark={isDark} sectionTitleClass={sectionTitleClass} />
       ) : (
-        <MobileRail items={visible} isDark={isDark} sectionTitleClass={sectionTitleClass} />
+        <HighlightRail items={visible} isDark={isDark} sectionTitleClass={sectionTitleClass} />
       )}
     </section>
   );

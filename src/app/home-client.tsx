@@ -1,8 +1,9 @@
 "use client";
 
-import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
+import { LinkedinIcon } from "@/components/icons/linkedin-icon";
+import { YoutubeIcon } from "@/components/icons/youtube-icon";
 import { HighlightedEditsGallery, type HighlightEditItem } from "@/components/highlighted-edits-gallery";
 import { ExperienceFlipCards } from "@/components/experience-flip-cards";
 import { ProductionVault } from "@/components/production-vault";
@@ -15,9 +16,37 @@ import { smoothScrollToElement } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
-import { Archive, Briefcase, FileText, House, LayoutGrid, Link2, Loader2, Moon, Sparkles, Sun, Zap } from "lucide-react";
-import Link from "next/link";
+import {
+  Archive,
+  Briefcase,
+  FileText,
+  House,
+  LayoutGrid,
+  Link2,
+  Loader2,
+  MessageCircle,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+const HEADER_SOCIALS = [
+  {
+    href: "https://youtube.com/@rishabhsportfolio?si=NTQ5HeB8CZYCBMrD",
+    label: "YouTube",
+    Icon: YoutubeIcon,
+  },
+  {
+    href: "https://www.linkedin.com/in/rishabhdiwaker0012",
+    label: "LinkedIn",
+    Icon: LinkedinIcon,
+  },
+  {
+    href: "https://wa.me/918077884422",
+    label: "WhatsApp",
+    Icon: MessageCircle,
+  },
+] as const;
 
 const CV_ICON_SRC = "/download-cv-icon.png";
 const HERO_WORD_INTERVAL = 420;
@@ -108,7 +137,6 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [bgBlurActive, setBgBlurActive] = useState(false);
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
@@ -216,18 +244,10 @@ export default function HomeClient({ content }: HomeClientProps) {
   );
 
   useEffect(() => {
-    // Always default to light mode on first paint (ignore localStorage/time-of-day).
-    // Users can still toggle manually afterwards.
-    setTheme("light");
-    try {
-      window.localStorage.setItem("portfolio-theme", "light");
-    } catch {
-      /* ignore */
-    }
     setIsMounted(true);
   }, []);
 
-  const isDark = theme === "dark";
+  const isDark = false;
   /** Section titles on the full-bleed hero (always light type). */
   const headingClass = "text-white title-glow-opposite-light-text";
   const sectionHeadingClass = SECTION_TITLE_ON_HERO;
@@ -256,13 +276,6 @@ export default function HomeClient({ content }: HomeClientProps) {
   const dockActiveGlowClass = isDark
     ? "shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_26px_12px_rgba(253,224,71,0.22),0_0_52px_20px_rgba(249,115,22,0.12)]"
     : "shadow-[0_0_0_1px_rgba(251,146,60,0.35),0_0_22px_10px_rgba(251,191,36,0.32),0_0_44px_18px_rgba(234,88,12,0.14)]";
-  const handleThemeToggle = () => {
-    setTheme((currentTheme) => {
-      const nextTheme = currentTheme === "dark" ? "light" : "dark";
-      window.localStorage.setItem("portfolio-theme", nextTheme);
-      return nextTheme;
-    });
-  };
 
   const handleCvDownload = useCallback(async () => {
     if (cvLoading) return;
@@ -507,22 +520,25 @@ export default function HomeClient({ content }: HomeClientProps) {
         transition={{ duration: sectionEnterMs, ease: cinematicEase }}
         className={`fixed left-0 right-0 top-0 z-50 ${headerSurfaceClass}`}
       >
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-5 md:flex-row md:items-start md:justify-between md:px-10">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <p className={`text-lg font-bold tracking-tight md:text-xl md:font-extrabold ${headerNameClass}`}>
+        <div className="mx-auto flex min-h-[52px] max-w-6xl items-center justify-between gap-2 px-4 py-2 sm:gap-3 sm:px-6 md:h-[52px] md:px-10 md:py-0">
+          <div className="flex min-w-0 flex-1 items-center">
+            <span className={`shrink-0 text-xs font-bold sm:text-sm ${headerNameClass}`}>
               {content.header.name}
-            </p>
-            <p
-              className={`max-w-md text-[11px] font-medium uppercase leading-snug tracking-[0.18em] md:text-xs md:tracking-[0.2em] ${
-                isDark ? "text-zinc-500" : "text-zinc-600"
+            </span>
+            <span className="mx-1.5 hidden shrink-0 opacity-40 min-[420px]:inline sm:mx-2" aria-hidden>
+              ·
+            </span>
+            <span
+              className={`hidden min-w-0 truncate text-[9px] uppercase tracking-[0.12em] opacity-60 min-[420px]:inline sm:text-[10px] sm:tracking-[0.15em] ${
+                isDark ? "text-zinc-400" : "text-zinc-600"
               }`}
             >
               {content.header.tagline}
-            </p>
+            </span>
           </div>
-          <div className={`flex flex-wrap items-center gap-4 self-start text-sm md:self-auto ${cardMutedClass}`}>
+          <div className={`flex shrink-0 items-center gap-1 text-sm sm:gap-2 md:gap-3 ${cardMutedClass}`}>
             <span
-              className={`rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] ${
+              className={`hidden rounded-full border px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] sm:inline-flex sm:px-3 sm:py-1 sm:text-[10px] sm:tracking-[0.14em] ${
                 isDark
                   ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-300"
                   : "border-emerald-600/35 bg-emerald-500/10 text-emerald-800"
@@ -530,37 +546,22 @@ export default function HomeClient({ content }: HomeClientProps) {
             >
               {content.header.statusLabel}
             </span>
-            <a
-              href={content.header.whatsappUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Chat on WhatsApp"
-              className={`inline-flex items-center justify-center rounded-full p-1.5 transition-colors duration-200 ${
-                isDark
-                  ? "text-zinc-300 hover:bg-emerald-500/15 hover:text-emerald-300"
-                  : "text-zinc-600 hover:bg-emerald-500/10 hover:text-emerald-700"
-              }`}
-            >
-              <WhatsAppIcon size={20} />
-            </a>
-            <button
-              type="button"
-              onClick={handleThemeToggle}
-              aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-              className={`relative flex h-8 w-14 items-center rounded-full border p-1 transition-colors duration-300 ${
-                isDark ? "border-zinc-700 bg-zinc-900/80" : "border-zinc-300 bg-white/90"
-              }`}
-            >
-              <motion.span
-                animate={{ x: isDark ? 0 : 24 }}
-                transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                  isDark ? "bg-zinc-200 text-zinc-900" : "bg-zinc-900 text-zinc-100"
+            {HEADER_SOCIALS.map(({ href, label, Icon }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={label}
+                className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 sm:h-8 sm:w-8 ${
+                  isDark
+                    ? "text-zinc-300 hover:bg-white/10 hover:text-white"
+                    : "text-zinc-600 hover:bg-zinc-900/5 hover:text-zinc-950"
                 }`}
               >
-                {isDark ? <Moon size={12} /> : <Sun size={12} />}
-              </motion.span>
-            </button>
+                <Icon size={16} className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
+              </a>
+            ))}
           </div>
         </div>
       </motion.header>
