@@ -13,6 +13,7 @@ import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { smoothScrollToElement } from "@/lib/smooth-scroll";
+import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import Image from "next/image";
@@ -280,7 +281,8 @@ export default function HomeClient({ content }: HomeClientProps) {
   const handleCvDownload = useCallback(async () => {
     if (cvLoading) return;
 
-    const url = content.resume?.url || "/rishabh-diwaker-cv.pdf";
+    const rawUrl = content.resume?.url || "/rishabh-diwaker-cv.pdf";
+    const url = resolveResumeDownloadUrl(rawUrl);
     const filename = content.resume?.downloadName || "Rishabh-Diwaker-CV.pdf";
 
     setCvLoading(true);
@@ -292,6 +294,11 @@ export default function HomeClient({ content }: HomeClientProps) {
       setCvLoading(false);
       cvToastTimerRef.current = null;
     }, 2000);
+
+    if (isExternalResumeUrl(url)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
 
     try {
       const response = await fetch(url);

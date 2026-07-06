@@ -50,17 +50,17 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const content = await readContent();
   return {
-    title: content.seo.title,
-    description: content.seo.description,
-    ...(content.seo.favicon
-      ? {
-          icons: {
-            icon: [{ url: content.seo.favicon }],
-            shortcut: [content.seo.favicon],
-            apple: [{ url: content.seo.favicon }],
-          },
-        }
-      : {}),
+    title: "Rishabh Diwaker — Video Editor & AI Creator | Bangalore",
+    description:
+      "Video Editor & AI Creator with 5+ years building high-retention content — short-form, brand campaigns, motion graphics, and AI-powered workflows for YouTube, Reels, and digital platforms.",
+    icons: {
+      icon: [
+        { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+        { url: "/favicon.ico", sizes: "any" },
+      ],
+      shortcut: "/favicon.png",
+      apple: { url: "/favicon.png", sizes: "512x512" },
+    },
   };
 }
 

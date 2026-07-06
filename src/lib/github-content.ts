@@ -41,6 +41,15 @@ export async function writeGitHubText(
   body: string,
   message: string,
 ): Promise<void> {
+  await writeGitHubBinary(path, Buffer.from(body, "utf-8"), message);
+}
+
+/** Write a binary file to the repo; returns a public raw URL when available. */
+export async function writeGitHubBinary(
+  path: string,
+  body: Buffer,
+  message: string,
+): Promise<string> {
   const headers = githubHeaders();
   if (!headers) {
     throw new Error("GITHUB_STORAGE_UNAVAILABLE");
@@ -62,7 +71,7 @@ export async function writeGitHubText(
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
       message,
-      content: Buffer.from(body, "utf-8").toString("base64"),
+      content: body.toString("base64"),
       ...(sha ? { sha } : {}),
     }),
   });
@@ -71,9 +80,20 @@ export async function writeGitHubText(
     const err = (await putRes.json().catch(() => ({}))) as { message?: string };
     throw new Error(err.message || "GitHub write failed");
   }
+
+  const data = (await putRes.json()) as {
+    content?: { download_url?: string | null };
+  };
+  const downloadUrl = data.content?.download_url;
+  if (downloadUrl) return downloadUrl;
+
+  const [owner, repo] = repoSlug().split("/");
+  const branch = process.env.GITHUB_BRANCH || "main";
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
 }
 
 export { CONTENT_FILE as GITHUB_CONTENT_PATH };
+export const GITHUB_RESUME_PATH = "public/rishabh-diwaker-cv.pdf";
 
 export function storageSetupHint(): string {
   return (

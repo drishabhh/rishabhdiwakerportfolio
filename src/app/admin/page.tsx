@@ -902,6 +902,15 @@ export default function AdminPage() {
                   },
                 })
               }
+              onUrlChange={(v) =>
+                setContent({
+                  ...content,
+                  resume: {
+                    url: v,
+                    downloadName: content.resume?.downloadName ?? "Rishabh-Diwaker-CV.pdf",
+                  },
+                })
+              }
               uploading={uploadingResume}
               error={resumeError}
               onUpload={uploadResume}

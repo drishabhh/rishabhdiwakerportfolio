@@ -1,7 +1,7 @@
 import { isAdminAuthenticated } from "@/lib/auth";
 import { readContent, writeContent } from "@/lib/content";
 import { hasBlobStorage, RESUME_BLOB_PATH, writeBlobFile } from "@/lib/content-storage";
-import { storageSetupHint } from "@/lib/github-content";
+import { GITHUB_RESUME_PATH, hasGitHubStorage, storageSetupHint, writeGitHubBinary } from "@/lib/github-content";
 import { mkdir, writeFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import path from "path";
@@ -46,13 +46,25 @@ export async function POST(request: Request) {
       }
     }
 
+    if (!resumeUrl && hasGitHubStorage()) {
+      try {
+        resumeUrl = await writeGitHubBinary(
+          GITHUB_RESUME_PATH,
+          buffer,
+          "Update resume from admin dashboard",
+        );
+      } catch {
+        /* fall through */
+      }
+    }
+
     if (!resumeUrl) {
       if (process.env.VERCEL === "1") {
         return NextResponse.json(
           {
             error:
-              "Resume upload needs Vercel Blob on production. " +
-              storageSetupHint().replace(/^Configure /, "Configure "),
+              "Resume upload needs persistent storage on production. " +
+              storageSetupHint(),
           },
           { status: 503 },
         );
