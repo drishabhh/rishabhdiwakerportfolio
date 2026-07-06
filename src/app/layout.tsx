@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { readContent } from "@/lib/content";
 import {
   Bungee_Outline,
   DotGothic16,
@@ -48,7 +47,6 @@ const dotGothic16 = DotGothic16({
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const content = await readContent();
   return {
     title: "Rishabh Diwaker — Video Editor & AI Creator | Bangalore",
     description:
