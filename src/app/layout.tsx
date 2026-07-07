@@ -169,6 +169,8 @@ export default function RootLayout({
               "@type": "Person",
               name: "Rishabh Diwaker",
               alternateName: "Rishabh Diwakar",
+              datePublished: "2026-04-01",
+              dateModified: "2026-07-07",
             }),
           }}
         />

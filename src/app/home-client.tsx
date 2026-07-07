@@ -485,10 +485,6 @@ export default function HomeClient({ content }: HomeClientProps) {
     });
   }, [navReducedMotion]);
 
-  if (!isMounted) {
-    return null;
-  }
-
   return (
     <motion.main
       initial={false}
