@@ -126,8 +126,8 @@ const navItems = [
   { id: "contact", label: "Contact", icon: Link2, targetId: "colophon" },
 ] as const;
 
-const HOME_BG = "/hero/home-bg.png";
-const HOME_BG_MOBILE = "/hero/bg-mob.png";
+const HOME_BG = "/hero/home-bg.jpg";
+const HOME_BG_MOBILE = "/hero/home-bg.jpg";
 const HOME_HERO_LOGO = "/hero-logo.png";
 
 /** Hero tagline: width tracks logo breakpoints. */
