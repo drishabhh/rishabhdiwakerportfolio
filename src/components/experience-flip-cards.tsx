@@ -9,6 +9,20 @@ import { useEffect, useState, type SyntheticEvent } from "react";
 const focusSpring = { type: "spring" as const, stiffness: 280, damping: 32, mass: 0.85 };
 const fadeSpring = { type: "spring" as const, stiffness: 320, damping: 38, mass: 0.75 };
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  return isMobile;
+}
+
 type ExperienceRole = ContentExperienceRole & {
   marketingLinks?: Array<{ label: string; href: string }>;
 };
@@ -40,22 +54,14 @@ type ExperienceCardProps = {
 
 function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: ExperienceCardProps) {
   const reduceMotion = useReducedMotion();
-  const [embedActive, setEmbedActive] = useState(false);
+  const isMobile = useIsMobile();
   const hasMarketingLinks = Boolean(entry.marketingLinks?.length);
+  const embedSrc = isOpen ? buildEmbedUrl(roleVideoId(entry), entry.embedStart) : undefined;
+  const useFocusMotion = !reduceMotion && !isMobile;
 
   const stopPropagation = (e: SyntheticEvent) => {
     e.stopPropagation();
   };
-
-  useEffect(() => {
-    if (isOpen) {
-      setEmbedActive(true);
-    } else {
-      setEmbedActive(false);
-    }
-  }, [isOpen]);
-
-  const embedSrc = embedActive ? buildEmbedUrl(roleVideoId(entry), entry.embedStart) : undefined;
 
   const marketingLinksBlock = hasMarketingLinks ? (
     <div className="mt-5 space-y-2.5" data-no-card-activate="true">
@@ -128,6 +134,109 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
     );
   }
 
+  const cardShellClass = isDark
+    ? "border-white/10 bg-[#1A1A1A] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_50px_-28px_rgba(0,0,0,0.45)]"
+    : "border-zinc-200/80 bg-zinc-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_18px_50px_-28px_rgba(0,0,0,0.35)]";
+
+  const cardBody = isOpen ? (
+    <div
+      className={`relative flex h-full min-h-[320px] flex-col overflow-hidden rounded-2xl border-2 border-orange-400/45 bg-black shadow-[0_0_0_1px_rgba(255,140,70,0.25),0_0_40px_-8px_rgba(255,120,55,0.35)] md:min-h-[360px]`}
+    >
+      <button
+        type="button"
+        className="absolute right-3 top-3 z-[60] rounded-full border border-white/30 bg-black/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white backdrop-blur-md"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        Close
+      </button>
+      {embedSrc ? (
+        <iframe
+          key={embedSrc}
+          title="Work sample preview"
+          className="absolute inset-0 h-full w-full scale-[1.02] border-0 object-cover"
+          src={embedSrc}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-black" />
+      )}
+    </div>
+  ) : (
+    <div className={`relative flex h-full min-h-[320px] flex-col rounded-2xl border p-6 md:min-h-[360px] md:p-7 ${cardShellClass}`}>
+      <div
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 rounded-2xl ${isDark ? "opacity-[0.08]" : "opacity-[0.14]"}`}
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`,
+          mixBlendMode: isDark ? "overlay" : "multiply",
+        }}
+      />
+      <div className="relative flex h-full flex-col">
+        <p
+          className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+            isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
+          }`}
+        >
+          {entry.dateRange}
+        </p>
+        <h3
+          className={`mt-4 max-w-full font-serif text-2xl font-bold leading-tight tracking-tight md:mt-5 md:text-[1.75rem] md:font-extrabold ${
+            isDark ? "text-white title-glow-opposite-light-text" : "text-black title-glow-opposite-dark-text"
+          }`}
+        >
+          {entry.company}
+        </h3>
+        <p
+          className={`mt-2 text-sm font-medium md:text-base ${
+            isDark ? "text-white/85 title-glow-opposite-light-text" : "text-zinc-700"
+          }`}
+        >
+          {entry.role}
+        </p>
+        {marketingLinksBlock}
+        <div className="flex flex-1 items-center justify-center py-6">
+          <button
+            type="button"
+            data-no-card-activate="true"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+            onPointerDown={stopPropagation}
+            className={`inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] shadow-sm transition-all duration-200 hover:scale-[1.03] md:text-[11px] ${
+              isDark
+                ? "border-orange-400/50 bg-orange-500/15 text-orange-200 hover:border-orange-400 hover:bg-orange-500/25 hover:shadow-[0_0_20px_rgba(249,115,22,0.35)]"
+                : "border-orange-400/70 bg-white text-zinc-900 hover:border-orange-500 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)]"
+            }`}
+          >
+            <Play className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
+            Click here to watch
+          </button>
+        </div>
+        {!hasMarketingLinks ? (
+          <p
+            className={`max-w-[20rem] text-xs leading-relaxed md:text-sm ${
+              isDark ? "text-zinc-300" : "text-zinc-500"
+            }`}
+          >
+            {entry.tagline}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (!useFocusMotion) {
+    return (
+      <article className="relative min-h-[320px] w-full md:min-h-[360px]">
+        <div className="relative h-full w-full">{cardBody}</div>
+      </article>
+    );
+  }
+
   return (
     <motion.div
       className={`relative min-h-[320px] w-full md:min-h-[360px] ${isOpen ? "z-20" : "z-0"}`}
@@ -139,112 +248,7 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
       transition={isOpen ? focusSpring : fadeSpring}
       style={{ transformOrigin: "center center" }}
     >
-      <div className="relative h-[min(100%,380px)] min-h-[320px] w-full md:min-h-[360px]">
-        <div className="relative h-full w-full rounded-2xl">
-          {/* Front */}
-          <div
-            className={`absolute inset-0 z-[1] flex flex-col rounded-2xl border p-6 transition-opacity duration-300 ease-out md:p-7 ${
-              isOpen ? "pointer-events-none opacity-0" : "opacity-100"
-            } ${
-              isDark
-                ? "border-white/10 bg-[#1A1A1A] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_50px_-28px_rgba(0,0,0,0.45)]"
-                : "border-zinc-200/80 bg-zinc-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_18px_50px_-28px_rgba(0,0,0,0.35)]"
-            }`}
-          >
-            <div
-              aria-hidden
-              className={`pointer-events-none absolute inset-0 rounded-2xl ${isDark ? "opacity-[0.08]" : "opacity-[0.14]"}`}
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`,
-                mixBlendMode: isDark ? "overlay" : "multiply",
-              }}
-            />
-            <div className="relative flex h-full flex-col">
-              <p
-                className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-                  isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
-                }`}
-              >
-                {entry.dateRange}
-              </p>
-              <h3
-                className={`mt-4 max-w-full font-serif text-2xl font-bold leading-tight tracking-tight md:mt-5 md:text-[1.75rem] md:font-extrabold ${
-                  isDark ? "text-white title-glow-opposite-light-text" : "text-black title-glow-opposite-dark-text"
-                }`}
-              >
-                {entry.company}
-              </h3>
-              <p
-                className={`mt-2 text-sm font-medium md:text-base ${
-                  isDark ? "text-white/85 title-glow-opposite-light-text" : "text-zinc-700"
-                }`}
-              >
-                {entry.role}
-              </p>
-              {marketingLinksBlock}
-              <div className="flex flex-1 items-center justify-center py-6">
-                <button
-                  type="button"
-                  data-no-card-activate="true"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpen();
-                  }}
-                  onPointerDown={stopPropagation}
-                  className={`inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] shadow-sm transition-all duration-200 hover:scale-[1.03] md:text-[11px] ${
-                    isDark
-                      ? "border-orange-400/50 bg-orange-500/15 text-orange-200 hover:border-orange-400 hover:bg-orange-500/25 hover:shadow-[0_0_20px_rgba(249,115,22,0.35)]"
-                      : "border-orange-400/70 bg-white text-zinc-900 hover:border-orange-500 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)]"
-                  }`}
-                >
-                  <Play className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden />
-                  Click here to watch
-                </button>
-              </div>
-              {!hasMarketingLinks ? (
-                <p
-                  className={`max-w-[20rem] text-xs leading-relaxed md:text-sm ${
-                    isDark ? "text-zinc-300" : "text-zinc-500"
-                  }`}
-                >
-                  {entry.tagline}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Video */}
-          <div
-            className={`absolute inset-0 z-[2] overflow-hidden rounded-2xl border-2 border-orange-400/45 bg-black shadow-[0_0_0_1px_rgba(255,140,70,0.25),0_0_40px_-8px_rgba(255,120,55,0.35)] transition-opacity duration-300 ease-out ${
-              isOpen ? "opacity-100" : "pointer-events-none opacity-0"
-            }`}
-          >
-            {isOpen ? (
-              <button
-                type="button"
-                className="absolute right-3 top-3 z-[60] rounded-full border border-white/30 bg-black/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white backdrop-blur-md"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-              >
-                Close
-              </button>
-            ) : null}
-            {embedSrc ? (
-              <iframe
-                key={embedSrc}
-                title="Work sample preview"
-                className="absolute inset-0 h-full w-full scale-[1.02] border-0 object-cover"
-                src={embedSrc}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-black" />
-            )}
-          </div>
-        </div>
-      </div>
+      <div className="relative h-full w-full">{cardBody}</div>
     </motion.div>
   );
 }
