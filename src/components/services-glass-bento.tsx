@@ -259,25 +259,23 @@ export function ServicesGlassBento({
   ];
 
   return (
-    <motion.section
-      id="services"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.1 }}
-      variants={{
-        hidden: {},
-        visible: {
-          transition: { staggerChildren: 0.06, delayChildren: 0.02 },
-        },
-      }}
-      className="relative z-10 scroll-mt-28 space-y-6"
-      aria-labelledby="services-heading"
-    >
+    <section id="services" className="relative z-10 space-y-6" aria-labelledby="services-heading">
       <h2 id="services-heading" className={sectionTitleClass}>
         {title}
       </h2>
 
-      <div className="space-y-4 md:space-y-4">
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.12 }}
+        variants={{
+          hidden: {},
+          visible: {
+            transition: { staggerChildren: 0.06, delayChildren: 0.02 },
+          },
+        }}
+        className="space-y-4 md:space-y-4"
+      >
         {serviceRows.map((row, rowIndex) => (
           <div key={`services-row-${rowIndex}`} className="flex flex-col gap-4 md:flex-row">
             {row.map(({ svc, baseFlex }) => (
@@ -297,7 +295,7 @@ export function ServicesGlassBento({
             ))}
           </div>
         ))}
-      </div>
-    </motion.section>
+      </motion.div>
+    </section>
   );
 }

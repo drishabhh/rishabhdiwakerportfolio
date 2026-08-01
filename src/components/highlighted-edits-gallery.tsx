@@ -737,6 +737,7 @@ const MARQUEE_SPEED_PX_PER_SEC = 72;
 const MARQUEE_EDGE_RATIO = 0.2;
 const MARQUEE_EDGE_SPEED = 0.85;
 const MARQUEE_DRAG_THRESHOLD_PX = 6;
+const MARQUEE_HOVER_OPEN_DELAY_MS = 380;
 
 type StripId = "a" | "b";
 
@@ -761,9 +762,15 @@ function HighlightRail({
 }) {
   const railRef = useRef<HTMLDivElement>(null);
   const expandedLockRef = useRef(false);
+  const dragGuardRef = useRef(false);
+  const draggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartScrollRef = useRef(0);
+  const capturePointerIdRef = useRef<number | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
   const [playbackPaused, setPlaybackPaused] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const close = useCallback(() => {
     setActiveId(null);
@@ -808,13 +815,60 @@ function HighlightRail({
     document.body.style.overflow = "";
   }, [activeId]);
 
+  const releaseCapture = useCallback((pointerId: number) => {
+    if (capturePointerIdRef.current !== pointerId) return;
+    railRef.current?.releasePointerCapture(pointerId);
+    capturePointerIdRef.current = null;
+  }, []);
+
   return (
     <div className="space-y-5">
       <GalleryHeader sectionTitleClass={sectionTitleClass} />
       <div
         ref={railRef}
         data-lenis-prevent
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={`flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [touch-action:pan-y] [&::-webkit-scrollbar]:hidden ${
+          isDragging ? "cursor-grabbing snap-none" : "cursor-grab"
+        }`}
+        onPointerDownCapture={(e) => {
+          if (e.button !== 0) return;
+          if ((e.target as HTMLElement).closest("button")) return;
+
+          draggingRef.current = false;
+          dragGuardRef.current = false;
+          setIsDragging(false);
+          dragStartXRef.current = e.clientX;
+          dragStartScrollRef.current = railRef.current?.scrollLeft ?? 0;
+          capturePointerIdRef.current = e.pointerId;
+          railRef.current?.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const rail = railRef.current;
+          if (!rail || capturePointerIdRef.current !== e.pointerId) return;
+
+          const dx = e.clientX - dragStartXRef.current;
+          if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
+            draggingRef.current = true;
+            dragGuardRef.current = true;
+            setIsDragging(true);
+            if (activeId !== null) close();
+          }
+
+          if (draggingRef.current) {
+            e.preventDefault();
+            rail.scrollLeft = dragStartScrollRef.current - dx;
+          }
+        }}
+        onPointerUp={(e) => {
+          releaseCapture(e.pointerId);
+          draggingRef.current = false;
+          setIsDragging(false);
+        }}
+        onPointerCancel={(e) => {
+          releaseCapture(e.pointerId);
+          draggingRef.current = false;
+          setIsDragging(false);
+        }}
       >
         {items.map((item, index) => (
           <div key={`${item.href ?? item.title}-${index}`} data-card className="shrink-0">
@@ -825,6 +879,7 @@ function HighlightRail({
               isDark={isDark}
               muted={muted}
               playbackPaused={activeId === index && playbackPaused}
+              dragGuardRef={dragGuardRef}
               touchUi
               onExpandedChange={(exp) => {
                 expandedLockRef.current = exp;
@@ -862,14 +917,21 @@ function DesktopMarquee({
   const draggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartOffsetRef = useRef(0);
+  const capturePointerIdRef = useRef<number | null>(null);
+  const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slotExpandedRef = useRef<Record<string, boolean>>({});
 
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
+  const activeSlotRef = useRef<string | null>(null);
   const [muted, setMuted] = useState(true);
   const [playbackPaused, setPlaybackPaused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   const itemCount = items.length;
+
+  useEffect(() => {
+    activeSlotRef.current = activeSlot;
+  }, [activeSlot]);
 
   useEffect(() => {
     cycleLenRef.current = Math.max(itemCount * CARD_STEP, 1);
@@ -958,6 +1020,36 @@ function DesktopMarquee({
     setPlaybackPaused(false);
   }, []);
 
+  const clearHoverOpenTimer = useCallback(() => {
+    if (hoverOpenTimerRef.current) {
+      clearTimeout(hoverOpenTimerRef.current);
+      hoverOpenTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHoverOpen = useCallback(
+    (strip: StripId, index: number, canPlay: boolean) => {
+      if (!canPlay || draggingRef.current || dragGuardRef.current) return;
+      clearHoverOpenTimer();
+      hoverOpenTimerRef.current = setTimeout(() => {
+        if (!draggingRef.current && !dragGuardRef.current && activeSlotRef.current === null) {
+          open(strip, index);
+        }
+      }, MARQUEE_HOVER_OPEN_DELAY_MS);
+    },
+    [clearHoverOpenTimer, open],
+  );
+
+  const releaseCapture = useCallback((pointerId: number) => {
+    if (capturePointerIdRef.current !== pointerId) return;
+    containerRef.current?.releasePointerCapture(pointerId);
+    capturePointerIdRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => clearHoverOpenTimer();
+  }, [clearHoverOpenTimer]);
+
   const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
   const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
 
@@ -995,10 +1087,10 @@ function DesktopMarquee({
             playbackPaused={activeSlot === slot && playbackPaused}
             dragGuardRef={dragGuardRef}
             onPointerEnterCard={() => {
-              if (draggingRef.current || dragGuardRef.current || !canPlay) return;
-              open(copyKey, i);
+              scheduleHoverOpen(copyKey, i, canPlay);
             }}
             onPointerLeaveCard={() => {
+              clearHoverOpenTimer();
               if (activeSlot === slot && !slotExpandedRef.current[slot]) close();
             }}
             onExpandedChange={(exp) => {
@@ -1035,44 +1127,44 @@ function DesktopMarquee({
           if (activeSlot === null) speedTargetRef.current = 1;
         }}
         onPointerDownCapture={(e) => {
-          if (activeSlot !== null) return;
           if (e.button !== 0) return;
           if ((e.target as HTMLElement).closest("button")) return;
 
+          clearHoverOpenTimer();
           draggingRef.current = false;
           setIsDragging(false);
           dragGuardRef.current = false;
           dragStartXRef.current = e.clientX;
           dragStartOffsetRef.current = offsetRef.current;
           speedTargetRef.current = 0;
+          capturePointerIdRef.current = e.pointerId;
+          containerRef.current?.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
-          if (activeSlot !== null) return;
-
-          if (e.buttons === 1) {
-            const dx = e.clientX - dragStartXRef.current;
-            if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
-              draggingRef.current = true;
-              dragGuardRef.current = true;
-              setIsDragging(true);
-              close();
-            }
-            if (draggingRef.current) {
-              offsetRef.current = wrapOffset(dragStartOffsetRef.current - dx);
-            }
+          const isCaptured = capturePointerIdRef.current === e.pointerId;
+          if (!isCaptured && e.buttons !== 1) {
+            if (activeSlot === null) updateEdgeScrollTarget(e.clientX);
             return;
           }
 
-          updateEdgeScrollTarget(e.clientX);
-        }}
-        onPointerDown={(e) => {
-          if (activeSlot !== null) return;
-          if (e.button !== 0) return;
-          if ((e.target as HTMLElement).closest("button")) return;
-          dragStartXRef.current = e.clientX;
-          dragStartOffsetRef.current = offsetRef.current;
+          const dx = e.clientX - dragStartXRef.current;
+          if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
+            draggingRef.current = true;
+            dragGuardRef.current = true;
+            setIsDragging(true);
+            clearHoverOpenTimer();
+            if (activeSlotRef.current !== null) close();
+          }
+
+          if (draggingRef.current) {
+            offsetRef.current = wrapOffset(dragStartOffsetRef.current - dx);
+            return;
+          }
+
+          if (activeSlot === null) updateEdgeScrollTarget(e.clientX);
         }}
         onPointerUp={(e) => {
+          releaseCapture(e.pointerId);
           const wasDragging = draggingRef.current;
           draggingRef.current = false;
           setIsDragging(false);
@@ -1086,7 +1178,8 @@ function DesktopMarquee({
             }
           }
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          releaseCapture(e.pointerId);
           draggingRef.current = false;
           setIsDragging(false);
         }}

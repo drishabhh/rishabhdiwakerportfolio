@@ -4,7 +4,6 @@ import { LayoutGroup, motion } from "framer-motion";
 import Link from "next/link";
 import { Play } from "lucide-react";
 
-const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const layoutSpring = { type: "spring" as const, stiffness: 170, damping: 28, mass: 0.9 };
 
 import type { VaultPlaylist } from "@/lib/content";
@@ -87,20 +86,9 @@ export function ProductionVault({
   playlists,
 }: ProductionVaultProps) {
   return (
-    <motion.section
+    <section
       id="production-vault"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.08 }}
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        visible: {
-          opacity: 1,
-          y: 0,
-          transition: { duration: 1.1, ease: cinematicEase },
-        },
-      }}
-      className="scroll-mt-28 space-y-8 pt-4 md:space-y-10 md:pt-6"
+      className="space-y-8 pt-4 md:space-y-10 md:pt-6"
       aria-labelledby="production-vault-heading"
     >
       <div className="space-y-3">
@@ -119,6 +107,6 @@ export function ProductionVault({
           ))}
         </div>
       </LayoutGroup>
-    </motion.section>
+    </section>
   );
 }

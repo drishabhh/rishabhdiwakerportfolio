@@ -1,7 +1,7 @@
 "use client";
 
-import { ScrollDepthSection } from "@/components/scroll-depth-section";
-import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
+import { CinematicSection } from "@/components/cinematic-section";
+import { HeroBackground } from "@/components/hero-background";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
@@ -108,7 +108,11 @@ function shouldShowHeroOverlay(
   heroBottom: number,
   scrollingUp = false,
 ): boolean {
-  if (scrollY < (isMobile ? 32 : 24)) return true;
+  if (isMobile) {
+    return scrollY < innerHeight * 0.38;
+  }
+
+  if (scrollY < 24) return true;
 
   const summaryBio = document.getElementById("summary-bio");
   if (!summaryBio) return scrollY < innerHeight * 0.85;
@@ -140,7 +144,8 @@ const navItems = [
 
 const HOME_BG = "/hero/home-bg.jpg";
 const HOME_BG_MOBILE = "/hero/home-bg.jpg";
-const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
+const HOME_BG_OBJECT_POSITION_MOBILE = "-96px center";
+const HOME_BG_OBJECT_POSITION_DESKTOP = "-48px center";
 const HOME_HERO_LOGO = "/hero-logo.png";
 
 /** Hero tagline: width tracks logo breakpoints. */
@@ -278,6 +283,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const cardMutedClass = isDark ? "text-zinc-300" : "text-zinc-600";
   /** Service card titles on glass (dark vs light glass). */
   const cardTitleClass = isDark ? headingClass : "text-zinc-950 title-glow-opposite-dark-text";
+  const useHeroWebGL = isMounted && !isMobileView && !navReducedMotion;
   /** Header row (theme-aware). */
   const headerSurfaceClass = isDark
     ? "border-b border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md"
@@ -349,27 +355,11 @@ export default function HomeClient({ content }: HomeClientProps) {
     if (scrollLockRef.current) return;
 
     const { innerHeight } = window;
-    const docHeight = document.documentElement.scrollHeight;
-
-    const footer = document.getElementById("colophon");
-    if (footer && scrollY > 120) {
-      const footerTop = footer.getBoundingClientRect().top;
-      const nearPageBottom = scrollY + innerHeight >= docHeight - 80;
-      const footerInView = footerTop <= innerHeight * 0.42;
-      if (footerInView && nearPageBottom) {
-        setActiveTab((prev) => (prev === "contact" ? prev : "contact"));
-        return;
-      }
-    }
-
     const isMobile = window.innerWidth < 768;
-    const summaryRevealThreshold = isMobile ? 0.38 : 0.68;
-    const referenceY = scrollY + innerHeight * 0.28;
+    const anchorLine = innerHeight * (isMobile ? 0.34 : 0.3);
+
     const summaryBio = document.getElementById("summary-bio");
     const summaryTop = summaryBio?.getBoundingClientRect().top ?? innerHeight;
-    const summaryInView = summaryBio
-      ? summaryTop < innerHeight * summaryRevealThreshold
-      : scrollY > innerHeight * (isMobile ? 0.35 : 0.22);
     const scrollingUp = scrollingUpRef.current;
 
     let next: (typeof navItems)[number]["id"] = "home";
@@ -379,16 +369,20 @@ export default function HomeClient({ content }: HomeClientProps) {
 
     if (homeByScroll || (scrollingUp && homeBySummaryClear)) {
       next = "home";
-    } else if (scrollY > innerHeight * (isMobile ? 0.16 : 0.22) || summaryInView) {
+    } else if (scrollY > innerHeight * (isMobile ? 0.16 : 0.22) || summaryTop < innerHeight * (isMobile ? 0.38 : 0.68)) {
       next = "summary";
       for (const item of navItems.slice(1)) {
         const el = document.getElementById(item.targetId);
         if (!el) continue;
-        const sectionTop = el.getBoundingClientRect().top + scrollY;
-        if (sectionTop <= referenceY + 48) {
+        if (el.getBoundingClientRect().top <= anchorLine) {
           next = item.id;
         }
       }
+    }
+
+    const footer = document.getElementById("colophon");
+    if (footer && footer.getBoundingClientRect().top <= anchorLine + (isMobile ? 20 : 40)) {
+      next = "contact";
     }
 
     setActiveTab((prev) => (prev === next ? prev : next));
@@ -418,19 +412,10 @@ export default function HomeClient({ content }: HomeClientProps) {
     };
   }, [isMounted, lenis, updateActiveSection]);
 
-  useEffect(() => {
-    if (!isMounted) return;
-    const onResize = () => updateActiveSection(lenis?.scroll ?? window.scrollY);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [isMounted, lenis, updateActiveSection]);
-
-  /** Hero overlay + nav scroll spy: sync with Lenis every frame. */
-  useLenis(
-    (lenisInstance) => {
+  const syncScrollFrame = useCallback(
+    (scrollY: number) => {
       if (!isMounted || scrollLockRef.current) return;
 
-      const scrollY = lenisInstance.scroll;
       scrollingUpRef.current = scrollY < lastScrollYRef.current - 0.5;
       lastScrollYRef.current = scrollY;
       const innerHeight = window.innerHeight;
@@ -452,7 +437,7 @@ export default function HomeClient({ content }: HomeClientProps) {
       const hideHeroBg =
         isMobile
           ? footerTop < innerHeight * 0.92 && scrollY > innerHeight * 0.5
-          : footerTop < innerHeight * 0.55;
+          : footerTop < innerHeight * 0.72;
       const showHeroBg = scrollY < innerHeight * (isMobile ? 0.45 : 0.35);
       const ctaActive = isInHomeSection(isMobile);
 
@@ -468,6 +453,36 @@ export default function HomeClient({ content }: HomeClientProps) {
       setHeroOverlayVisible((prev) => (prev === nextVisible ? prev : nextVisible));
     },
     [isMounted, updateActiveSection],
+  );
+
+  /** Native scroll sync — mobile uses native scroll (no Lenis). */
+  useEffect(() => {
+    if (!isMounted || lenis) return;
+
+    let raf = 0;
+    const tick = () => {
+      syncScrollFrame(window.scrollY);
+      raf = requestAnimationFrame(tick);
+    };
+
+    syncScrollFrame(window.scrollY);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isMounted, lenis, syncScrollFrame]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    const onResize = () => updateActiveSection(lenis?.scroll ?? window.scrollY);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isMounted, lenis, updateActiveSection]);
+
+  /** Hero overlay + nav scroll spy: sync with Lenis every frame (desktop). */
+  useLenis(
+    (lenisInstance) => {
+      syncScrollFrame(lenisInstance.scroll);
+    },
+    [syncScrollFrame],
     1,
   );
 
@@ -573,12 +588,14 @@ export default function HomeClient({ content }: HomeClientProps) {
       style={{ minHeight: "100vh" }}
       className="relative isolate min-h-screen bg-transparent"
     >
-      <ScrollParallaxHeroBg
+      <HeroBackground
         desktopSrc={HOME_BG}
         mobileSrc={HOME_BG_MOBILE}
         mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
+        desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}
         blurred={bgBlurActive}
         hidden={heroBgHidden}
+        useWebGL={useHeroWebGL}
       />
 
       <motion.header
@@ -688,7 +705,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
         style={{ transformOrigin: "top right" }}
         className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${
-          !heroOverlayVisible ? "z-[5]" : contentElevated ? "z-[8]" : "z-[15]"
+          !heroOverlayVisible ? "max-md:hidden invisible z-[5]" : contentElevated ? "z-[8]" : "z-[15]"
         }`}
       >
         <motion.div
@@ -787,8 +804,8 @@ export default function HomeClient({ content }: HomeClientProps) {
         </div>
       </motion.div>
 
-      <div className={`scroll-3d-stage relative mx-auto flex w-full max-w-6xl flex-col gap-14 bg-transparent px-6 pb-16 pt-2 md:gap-20 md:pb-40 md:pt-8 md:[transform-style:preserve-3d] md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
-        <ScrollDepthSection
+      <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-14 bg-transparent px-6 pb-12 pt-2 md:gap-20 md:pb-16 md:pt-8 md:px-10 ${contentElevated || isMobileView ? "z-20" : "z-10"}`}>
+        <CinematicSection
           id="summary"
           depth="medium"
           className="scroll-mt-20 space-y-8 md:scroll-mt-28"
@@ -810,17 +827,17 @@ export default function HomeClient({ content }: HomeClientProps) {
               </p>
             </div>
           </div>
-        </ScrollDepthSection>
+        </CinematicSection>
 
-        <div className="relative z-20 scroll-mt-28">
+        <CinematicSection as="div" divider className="relative z-20 scroll-mt-28">
           <HighlightedEditsGallery
             items={highlightedEdits}
             isDark={isDark}
             sectionTitleClass={sectionHeadingClass}
           />
-        </div>
+        </CinematicSection>
 
-        <ScrollDepthSection id="skills" depth="medium" className="scroll-mt-28 space-y-6">
+        <CinematicSection id="skills" depth="medium" divider className="scroll-mt-28 space-y-6">
           <SkillsTagCloud
             isDark={isDark}
             headingClass={headingClass}
@@ -830,9 +847,9 @@ export default function HomeClient({ content }: HomeClientProps) {
             subtitle={content.skills.subtitle}
             blocks={content.skills.blocks}
           />
-        </ScrollDepthSection>
+        </CinematicSection>
 
-        <div className="relative z-20 scroll-mt-28">
+        <CinematicSection as="div" divider className="relative z-20 scroll-mt-28">
           <ProductionVault
             isDark={isDark}
             mutedClass={cardMutedClass}
@@ -842,12 +859,12 @@ export default function HomeClient({ content }: HomeClientProps) {
             subtitle={content.vault.subtitle}
             playlists={content.vault.playlists}
           />
-        </div>
+        </CinematicSection>
 
-        <ScrollDepthSection id="experience" depth="deep" className="scroll-mt-28 space-y-6">
+        <CinematicSection id="experience" divider className="scroll-mt-28 space-y-6">
           <h2 className={sectionHeadingClass}>{content.experience.title}</h2>
           <ExperienceFlipCards isDark={isDark} roles={content.experience.roles} />
-        </ScrollDepthSection>
+        </CinematicSection>
 
         <div className="relative z-20 scroll-mt-28">
           <ServicesGlassBento
@@ -863,10 +880,10 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       </div>
 
-      {/* Fade fixed hero portrait into footer black so the figure doesn’t hard-cut at the seam */}
+      {/* Opaque seam — hides fixed hero portrait before footer (no transparent bleed) */}
       <div
         aria-hidden
-        className="pointer-events-none relative z-[11] h-14 w-full bg-gradient-to-b from-transparent via-[#0a0a0a]/80 to-[#0A0A0A] md:h-40 md:via-[#0a0a0a]/82"
+        className="pointer-events-none relative z-[11] h-6 w-full bg-[#0A0A0A] md:h-10"
       />
 
       <SiteFooter
