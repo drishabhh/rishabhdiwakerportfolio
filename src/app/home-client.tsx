@@ -128,6 +128,7 @@ const navItems = [
 
 const HOME_BG = "/hero/home-bg.jpg";
 const HOME_BG_MOBILE = "/hero/home-bg.jpg";
+const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
 const HOME_HERO_LOGO = "/hero-logo.png";
 
 /** Hero tagline: width tracks logo breakpoints. */
@@ -502,7 +503,8 @@ export default function HomeClient({ content }: HomeClientProps) {
           fill
           priority
           unoptimized
-          className="object-cover object-center md:hidden"
+          className="object-cover md:hidden"
+          style={{ objectPosition: HOME_BG_OBJECT_POSITION_MOBILE }}
           sizes="100vw"
         />
         <Image
