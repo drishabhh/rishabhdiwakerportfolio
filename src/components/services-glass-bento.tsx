@@ -1,14 +1,12 @@
 "use client";
 
 import type { ServiceItem } from "@/lib/content";
-import { LayoutGroup, motion, type Variants } from "framer-motion";
-import { useCallback, type CSSProperties, type MouseEvent, type SVGProps } from "react";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { useCallback, useRef, type CSSProperties, type MouseEvent, type SVGProps } from "react";
 
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const layoutSpring = { type: "spring" as const, stiffness: 170, damping: 28, mass: 0.9 };
-
 
 function IconFilmStrip(props: SVGProps<SVGSVGElement>) {
   return (
@@ -75,7 +73,6 @@ function ServiceLineIcon({ id, className }: { id: ServiceIconId; className?: str
   }
 }
 
-
 type ServiceEntry = ServiceItem;
 
 type ServiceCardFrontProps = {
@@ -84,8 +81,6 @@ type ServiceCardFrontProps = {
   mutedClass: string;
   indexClass: string;
   iconBoxClass: string;
-  layoutTransition: typeof layoutSpring;
-  indexLayout?: boolean;
 };
 
 function ServiceCardFront({
@@ -94,19 +89,15 @@ function ServiceCardFront({
   mutedClass,
   indexClass,
   iconBoxClass,
-  layoutTransition,
-  indexLayout = true,
 }: ServiceCardFrontProps) {
   return (
     <>
-      <motion.span
-        layout={indexLayout}
-        transition={{ layout: layoutTransition }}
+      <span
         className={`pointer-events-none absolute right-4 top-3 select-none font-extralight tabular-nums tracking-tight md:right-5 md:top-4 ${indexClass} text-[3.25rem] leading-none sm:text-6xl md:text-7xl`}
         aria-hidden
       >
         {svc.indexLabel}
-      </motion.span>
+      </span>
 
       <div className={`relative mb-4 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${iconBoxClass}`}>
         <ServiceLineIcon id={svc.icon} className="h-6 w-6" />
@@ -128,7 +119,6 @@ function ServiceCardFront({
 type ServiceCardProps = {
   svc: ServiceEntry;
   cardVariants: Variants;
-  cardSurfaceClass: string;
   headingClass: string;
   mutedClass: string;
   indexClass: string;
@@ -136,12 +126,12 @@ type ServiceCardProps = {
   glassContentClass: string;
   isDark: boolean;
   baseFlex: number;
+  hoverEnabled: boolean;
 };
 
 function ServiceCard({
   svc,
   cardVariants,
-  cardSurfaceClass,
   headingClass,
   mutedClass,
   indexClass,
@@ -149,48 +139,51 @@ function ServiceCard({
   glassContentClass,
   isDark,
   baseFlex,
+  hoverEnabled,
 }: ServiceCardProps) {
-  const paintFlashlight = useCallback(
-    (e: MouseEvent<HTMLElement>) => {
-      const el = e.currentTarget;
+  const rafRef = useRef<number | null>(null);
+
+  const paintFlashlight = useCallback((e: MouseEvent<HTMLElement>) => {
+    if (rafRef.current !== null) return;
+    const el = e.currentTarget;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
       const r = el.getBoundingClientRect();
-      el.style.setProperty("--fx", `${((e.clientX - r.left) / r.width) * 100}%`);
-      el.style.setProperty("--fy", `${((e.clientY - r.top) / r.height) * 100}%`);
-    },
-    [],
-  );
+      el.style.setProperty("--fx", `${((clientX - r.left) / r.width) * 100}%`);
+      el.style.setProperty("--fy", `${((clientY - r.top) / r.height) * 100}%`);
+    });
+  }, []);
 
   const clearFlashlight = useCallback((e: MouseEvent<HTMLElement>) => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     e.currentTarget.style.removeProperty("--fx");
     e.currentTarget.style.removeProperty("--fy");
   }, []);
 
   return (
     <motion.article
-      layout
       variants={cardVariants}
-      transition={{ layout: { type: "spring", stiffness: 150, damping: 20 } }}
-      whileHover={{ flex: 2 }}
-      onMouseLeave={(e) => {
-        clearFlashlight(e);
-      }}
-      onMouseMove={paintFlashlight}
       style={
         {
           ["--fx" as string]: "50%",
           ["--fy" as string]: "50%",
-          flex: baseFlex,
+          flexGrow: baseFlex,
         } as CSSProperties
       }
-      className={`relative flex min-h-[240px] flex-col overflow-hidden rounded-2xl border shadow-sm lg:min-h-[260px] ${
-        isDark ? "border-white/10 bg-transparent" : "border-zinc-200 bg-transparent"
-      }`}
+      className={`relative flex min-h-[240px] min-w-0 basis-0 flex-col overflow-hidden rounded-2xl border shadow-sm lg:min-h-[260px] ${
+        hoverEnabled ? "transition-[flex-grow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:flex-grow-[2]" : ""
+      } ${isDark ? "border-white/10 bg-transparent" : "border-zinc-200 bg-transparent"}`}
+      onMouseLeave={clearFlashlight}
+      onMouseMove={paintFlashlight}
     >
-      <motion.div
-        transition={{ opacity: { duration: 0.2 }, scale: { duration: 0.2 } }}
-        className={`relative z-[1] flex min-h-0 flex-1 origin-center flex-col overflow-hidden rounded-2xl p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] md:p-7 ${glassContentClass}`}
-        animate={{ opacity: 1, scale: 1 }}
-        initial={false}
+      <div
+        className={`relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] md:p-7 ${glassContentClass}`}
       >
         <ServiceCardFront
           svc={svc}
@@ -198,9 +191,8 @@ function ServiceCard({
           mutedClass={mutedClass}
           indexClass={indexClass}
           iconBoxClass={iconBoxClass}
-          layoutTransition={layoutSpring}
         />
-      </motion.div>
+      </div>
 
       <div
         aria-hidden
@@ -219,11 +211,11 @@ function ServiceCard({
 }
 
 const cardVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.88, ease: cinematicEase },
+    transition: { duration: 0.5, ease: cinematicEase },
   },
 };
 
@@ -246,22 +238,23 @@ export function ServicesGlassBento({
   title,
   services,
 }: ServicesGlassBentoProps) {
+  const reduced = Boolean(useReducedMotion());
   const indexClass = isDark ? "text-zinc-600" : "text-zinc-300";
   const iconBoxClass = isDark
     ? "bg-zinc-800 text-zinc-100 ring-1 ring-white/10"
     : "bg-zinc-100 text-zinc-800 ring-1 ring-zinc-300/80";
   const glassContentClass = isDark
-    ? "border border-white/10 bg-[#1A1A1A]/76 backdrop-blur-2xl ring-1 ring-white/[0.06]"
-    : "border border-zinc-200/90 bg-white/78 backdrop-blur-2xl ring-1 ring-zinc-300/45";
+    ? "border border-white/10 bg-[#1A1A1A]/76 backdrop-blur-xl ring-1 ring-white/[0.06]"
+    : "border border-zinc-200/90 bg-white/78 backdrop-blur-xl ring-1 ring-zinc-300/45";
 
   const serviceRows: Array<Array<{ svc: ServiceEntry; baseFlex: number }>> = [
     [
-      { svc: services[0]!, baseFlex: 1 }, // ~35% — Short-Form Dominance
-      { svc: services[1]!, baseFlex: 1.86 }, // ~65% — Technical Post-Production
+      { svc: services[0]!, baseFlex: 1 },
+      { svc: services[1]!, baseFlex: 1.86 },
     ],
     [
-      { svc: services[2]!, baseFlex: 1 }, // ~35%
-      { svc: services[3]!, baseFlex: 1.86 }, // ~65%
+      { svc: services[2]!, baseFlex: 1 },
+      { svc: services[3]!, baseFlex: 1.86 },
     ],
   ];
 
@@ -274,46 +267,37 @@ export function ServicesGlassBento({
       variants={{
         hidden: {},
         visible: {
-          transition: { staggerChildren: 0.1, delayChildren: 0.04 },
+          transition: { staggerChildren: 0.06, delayChildren: 0.02 },
         },
       }}
       className="relative z-10 scroll-mt-28 space-y-6"
       aria-labelledby="services-heading"
     >
-      <LayoutGroup id="services-bento-layout">
-        <div className="relative z-20">
-          <motion.h2
-            layout
-            transition={{ layout: layoutSpring }}
-            id="services-heading"
-            className={sectionTitleClass}
-          >
-            {title}
-          </motion.h2>
-        </div>
+      <h2 id="services-heading" className={sectionTitleClass}>
+        {title}
+      </h2>
 
-        <div className="space-y-4 md:space-y-4">
-          {serviceRows.map((row, rowIndex) => (
-            <div key={`services-row-${rowIndex}`} className="flex flex-col gap-4 md:flex-row">
-              {row.map(({ svc, baseFlex }) => (
-                <ServiceCard
-                  key={svc.indexLabel}
-                  svc={svc}
-                  baseFlex={baseFlex}
-                  cardVariants={cardVariants}
-                  cardSurfaceClass={cardSurfaceClass}
-                  headingClass={headingClass}
-                  mutedClass={mutedClass}
-                  indexClass={indexClass}
-                  iconBoxClass={iconBoxClass}
-                  glassContentClass={glassContentClass}
-                  isDark={isDark}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </LayoutGroup>
+      <div className="space-y-4 md:space-y-4">
+        {serviceRows.map((row, rowIndex) => (
+          <div key={`services-row-${rowIndex}`} className="flex flex-col gap-4 md:flex-row">
+            {row.map(({ svc, baseFlex }) => (
+              <ServiceCard
+                key={svc.indexLabel}
+                svc={svc}
+                baseFlex={baseFlex}
+                cardVariants={cardVariants}
+                headingClass={headingClass}
+                mutedClass={mutedClass}
+                indexClass={indexClass}
+                iconBoxClass={iconBoxClass}
+                glassContentClass={glassContentClass}
+                isDark={isDark}
+                hoverEnabled={!reduced}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
     </motion.section>
   );
 }

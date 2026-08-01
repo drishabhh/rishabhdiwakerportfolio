@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
+import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -705,68 +705,30 @@ function HighlightCard({
 }
 
 function GalleryHeader({
-  isDark,
   sectionTitleClass,
-  onPrev,
-  onNext,
   constrained = false,
 }: {
-  isDark: boolean;
   sectionTitleClass?: string;
-  onPrev: () => void;
-  onNext: () => void;
   constrained?: boolean;
 }) {
-  const navBtnClass = `flex h-10 w-10 touch-manipulation items-center justify-center rounded-full border transition-colors ${
-    isDark
-      ? "border-white/15 bg-black/40 text-white hover:bg-white/10"
-      : "border-black/15 bg-white/80 text-black hover:bg-black/5"
-  }`;
-
-  const inner = (
-    <>
-      <h3
-        id="highlighted-edits-heading"
-        className={sectionTitleClass ?? "text-xs font-semibold uppercase tracking-[0.22em] md:text-sm"}
-      >
-        Highlighted edits
-      </h3>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          aria-label="Show previous highlighted edits"
-          onClick={(e) => {
-            e.stopPropagation();
-            onPrev();
-          }}
-          className={navBtnClass}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label="Show next highlighted edits"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNext();
-          }}
-          className={navBtnClass}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </>
+  const heading = (
+    <h3
+      id="highlighted-edits-heading"
+      className={sectionTitleClass ?? "text-xs font-semibold uppercase tracking-[0.22em] md:text-sm"}
+    >
+      Highlighted edits
+    </h3>
   );
 
   if (constrained) {
     return (
-      <div className="relative z-30 mx-auto flex max-w-6xl items-end justify-between gap-4 px-6 md:px-10">
-        {inner}
+      <div className="relative z-30 mx-auto max-w-6xl px-6 md:px-10">
+        {heading}
       </div>
     );
   }
 
-  return <div className="relative z-30 flex items-end justify-between">{inner}</div>;
+  return <div className="relative z-30">{heading}</div>;
 }
 
 const CARD_STEP = 220 + 16;
@@ -820,18 +782,6 @@ function HighlightRail({
   const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
   const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
 
-  const scrollByCards = useCallback(
-    (dir: 1 | -1) => {
-      close();
-      const rail = railRef.current;
-      if (!rail) return;
-      requestAnimationFrame(() => {
-        rail.scrollBy({ left: dir * CARD_STEP, behavior: "smooth" });
-      });
-    },
-    [close],
-  );
-
   useEffect(() => {
     if (activeId !== null && activeId >= items.length) close();
   }, [activeId, items.length, close]);
@@ -860,14 +810,10 @@ function HighlightRail({
 
   return (
     <div className="space-y-5">
-      <GalleryHeader
-        isDark={isDark}
-        sectionTitleClass={sectionTitleClass}
-        onPrev={() => scrollByCards(-1)}
-        onNext={() => scrollByCards(1)}
-      />
+      <GalleryHeader sectionTitleClass={sectionTitleClass} />
       <div
         ref={railRef}
+        data-lenis-prevent
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
@@ -995,12 +941,6 @@ function DesktopMarquee({
     return () => cancelAnimationFrame(raf);
   }, [wrapOffset]);
 
-  const nudge = useCallback((dir: 1 | -1) => {
-    setActiveSlot(null);
-    setPlaybackPaused(false);
-    offsetRef.current = wrapOffset(offsetRef.current + dir * CARD_STEP);
-  }, [wrapOffset]);
-
   const open = useCallback(
     (strip: StripId, index: number) => {
       if (index < 0 || index >= itemCount) return;
@@ -1076,16 +1016,11 @@ function DesktopMarquee({
 
   return (
     <div className="space-y-5">
-      <GalleryHeader
-        isDark={isDark}
-        sectionTitleClass={sectionTitleClass}
-        onPrev={() => nudge(-1)}
-        onNext={() => nudge(1)}
-        constrained
-      />
+      <GalleryHeader sectionTitleClass={sectionTitleClass} constrained />
 
       <div
         ref={containerRef}
+        data-lenis-prevent
         className={`relative w-full overflow-hidden py-4 select-none ${
           activeSlot ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}

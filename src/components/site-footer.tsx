@@ -118,7 +118,7 @@ export function SiteFooter({
       onMouseMove={paint}
       onMouseLeave={clearPointer}
       style={{ backgroundColor: FOOTER_BG, ...baseStyle }}
-      className="relative isolate scroll-mt-28 overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-28 pt-14 text-white md:pb-32 md:pt-16"
+      className="relative isolate z-[25] scroll-mt-28 overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-8 text-white md:pb-32 md:pt-16"
     >
       {/* Flashlight — brighter neutral so white copy reads as the beam passes */}
       <motion.div
@@ -147,7 +147,7 @@ export function SiteFooter({
 
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[min(42vh,480px)] select-none overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[min(22vh,200px)] select-none overflow-hidden md:h-[min(42vh,480px)]"
       >
         <div className="absolute left-1/2 top-0 h-[200%] w-[min(160vw,1680px)] -translate-x-1/2 opacity-[0.03]">
           <Image
@@ -163,11 +163,11 @@ export function SiteFooter({
       </div>
 
       <div className="relative z-10 mx-auto max-w-6xl px-6 md:px-10">
-        <h2 id="contact-heading" className={`mb-10 md:mb-12 ${sectionTitleClass}`}>
+        <h2 id="contact-heading" className={`mb-6 md:mb-12 ${sectionTitleClass}`}>
           Contact
         </h2>
 
-        <div className="grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-10 md:gap-y-0">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-10 md:gap-y-0">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <p className="text-lg font-bold tracking-[-0.02em] text-white title-glow-opposite-light-text md:text-xl">

@@ -1,5 +1,7 @@
 "use client";
 
+import { ScrollDepthSection } from "@/components/scroll-depth-section";
+import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
@@ -12,10 +14,10 @@ import { SiteFooter } from "@/components/site-footer";
 import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
-import { smoothScrollToElement } from "@/lib/smooth-scroll";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
+import { useLenis } from "lenis/react";
 import Image from "next/image";
 import {
   Archive,
@@ -70,11 +72,10 @@ const sectionEnterMs = 1.12;
 
 const sectionScrollOffset = 112;
 
-const navPillSpring = { stiffness: 220, damping: 30, mass: 0.9 };
+const navPillSpring = { stiffness: 320, damping: 34, mass: 0.82 };
 
 const heroDissolveShow = {
   opacity: 1,
-  visibility: "visible" as const,
   filter: "blur(0px) brightness(1) saturate(1)",
   scale: 1,
   y: 0,
@@ -82,11 +83,17 @@ const heroDissolveShow = {
 
 const heroDissolveHide = {
   opacity: 0,
-  visibility: "hidden" as const,
   filter: "blur(12px) brightness(1.12) saturate(0.85)",
   scale: 1.02,
   y: -10,
 };
+
+function isInHomeSection(isMobile: boolean): boolean {
+  const home = document.getElementById("home");
+  if (!home) return true;
+  const homeBottom = home.getBoundingClientRect().bottom;
+  return homeBottom > sectionScrollOffset + (isMobile ? 24 : 40);
+}
 
 function heroDissolveTransition(reduced: boolean, mobile: boolean, visible: boolean) {
   if (reduced) return { duration: 0.15, ease: "easeOut" as const };
@@ -99,20 +106,25 @@ function shouldShowHeroOverlay(
   innerHeight: number,
   isMobile: boolean,
   heroBottom: number,
+  scrollingUp = false,
 ): boolean {
+  if (scrollY < (isMobile ? 32 : 24)) return true;
+
   const summaryBio = document.getElementById("summary-bio");
   if (!summaryBio) return scrollY < innerHeight * 0.85;
 
   const summaryTop = summaryBio.getBoundingClientRect().top;
-  const anchorLine = isMobile ? sectionScrollOffset + 16 : sectionScrollOffset + 32;
-  const overlapPad = isMobile ? 10 : 14;
-  /** Hide at Summary anchor or before hero footprint overlaps section — whichever comes first. */
+  const anchorLine = isMobile ? sectionScrollOffset + 12 : sectionScrollOffset + 28;
+  const overlapPad = isMobile ? 8 : 12;
   const hideLine = Math.max(anchorLine, heroBottom + overlapPad);
-  const showLine = hideLine + (isMobile ? 80 : 104);
+  const showGap = isMobile ? (scrollingUp ? 28 : 48) : scrollingUp ? 56 : 88;
+  const showLine = hideLine + showGap;
 
-  if (summaryTop <= hideLine) return false;
-  if (summaryTop >= showLine || scrollY <= 8) return true;
-  return true;
+  if (!scrollingUp && summaryTop <= hideLine) return false;
+  if (scrollingUp && summaryTop <= hideLine - (isMobile ? 18 : 24)) return false;
+  if (summaryTop >= showLine) return true;
+  if (scrollingUp) return scrollY < innerHeight * (isMobile ? 0.58 : 0.48);
+  return scrollY < innerHeight * (isMobile ? 0.3 : 0.35);
 }
 
 const navItems = [
@@ -120,7 +132,7 @@ const navItems = [
   { id: "summary", label: "Summary", icon: FileText, targetId: "summary-bio" },
   { id: "highlights", label: "Highlights", icon: Sparkles, targetId: "highlighted-edits" },
   { id: "skills", label: "Skills", icon: Zap, targetId: "skills" },
-  { id: "vault", label: "Vault", icon: Archive, targetId: "production-vault" },
+  { id: "vault", label: "Archive", icon: Archive, targetId: "production-vault" },
   { id: "experience", label: "Experience", icon: Briefcase, targetId: "experience" },
   { id: "services", label: "Services", icon: LayoutGrid, targetId: "services" },
   { id: "contact", label: "Contact", icon: Link2, targetId: "colophon" },
@@ -136,15 +148,19 @@ const heroTaglineWidthClass =
   "w-full max-w-[min(90vw,500px)] sm:max-w-[min(85vw,540px)] md:max-w-[min(56vw,620px)] lg:max-w-[min(48vw,680px)]";
 
 export default function HomeClient({ content }: HomeClientProps) {
+  const lenis = useLenis();
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
   const [bgBlurActive, setBgBlurActive] = useState(false);
+  const [heroBgHidden, setHeroBgHidden] = useState(false);
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
+  const [heroCtaActive, setHeroCtaActive] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const scrollLockRef = useRef(false);
-  const cancelScrollRef = useRef<(() => void) | null>(null);
+  const lastScrollYRef = useRef(0);
+  const scrollingUpRef = useRef(false);
   const heroOverlayRef = useRef<HTMLDivElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const navButtonRefs = useRef<Partial<Record<(typeof navItems)[number]["id"], HTMLButtonElement>>>({});
@@ -154,7 +170,6 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [cvLoading, setCvLoading] = useState(false);
   const [cvToastVisible, setCvToastVisible] = useState(false);
   const cvToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollSpyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pillLeft = useSpring(0, navPillSpring);
   const pillWidth = useSpring(48, navPillSpring);
 
@@ -330,104 +345,145 @@ export default function HomeClient({ content }: HomeClientProps) {
     return () => window.removeEventListener("resize", syncMobile);
   }, []);
 
+  const updateActiveSection = useCallback((scrollY: number) => {
+    if (scrollLockRef.current) return;
+
+    const { innerHeight } = window;
+    const docHeight = document.documentElement.scrollHeight;
+
+    const footer = document.getElementById("colophon");
+    if (footer && scrollY > 120) {
+      const footerTop = footer.getBoundingClientRect().top;
+      const nearPageBottom = scrollY + innerHeight >= docHeight - 80;
+      const footerInView = footerTop <= innerHeight * 0.42;
+      if (footerInView && nearPageBottom) {
+        setActiveTab((prev) => (prev === "contact" ? prev : "contact"));
+        return;
+      }
+    }
+
+    const isMobile = window.innerWidth < 768;
+    const summaryRevealThreshold = isMobile ? 0.38 : 0.68;
+    const referenceY = scrollY + innerHeight * 0.28;
+    const summaryBio = document.getElementById("summary-bio");
+    const summaryTop = summaryBio?.getBoundingClientRect().top ?? innerHeight;
+    const summaryInView = summaryBio
+      ? summaryTop < innerHeight * summaryRevealThreshold
+      : scrollY > innerHeight * (isMobile ? 0.35 : 0.22);
+    const scrollingUp = scrollingUpRef.current;
+
+    let next: (typeof navItems)[number]["id"] = "home";
+
+    const homeByScroll = scrollY <= innerHeight * (isMobile ? 0.1 : 0.16);
+    const homeBySummaryClear = summaryTop > innerHeight * (isMobile ? 0.48 : 0.42);
+
+    if (homeByScroll || (scrollingUp && homeBySummaryClear)) {
+      next = "home";
+    } else if (scrollY > innerHeight * (isMobile ? 0.16 : 0.22) || summaryInView) {
+      next = "summary";
+      for (const item of navItems.slice(1)) {
+        const el = document.getElementById(item.targetId);
+        if (!el) continue;
+        const sectionTop = el.getBoundingClientRect().top + scrollY;
+        if (sectionTop <= referenceY + 48) {
+          next = item.id;
+        }
+      }
+    }
+
+    setActiveTab((prev) => (prev === next ? prev : next));
+  }, []);
+
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || lenis) return;
 
-    const updateActiveSection = () => {
-      if (scrollLockRef.current) return;
+    updateActiveSection(window.scrollY);
 
-      const { scrollY, innerHeight } = window;
-      const docHeight = document.documentElement.scrollHeight;
-
-      const footer = document.getElementById("colophon");
-      if (footer) {
-        const footerTop = footer.getBoundingClientRect().top;
-        if (footerTop <= innerHeight * 0.55 || scrollY + innerHeight >= docHeight - 100) {
-          setActiveTab((prev) => (prev === "contact" ? prev : "contact"));
-          return;
-        }
-      }
-
-      const isMobile = window.innerWidth < 768;
-      const summaryRevealThreshold = isMobile ? 0.38 : 0.68;
-      const referenceY = scrollY + innerHeight * 0.28;
-      const summaryBio = document.getElementById("summary-bio");
-      const summaryInView = summaryBio
-        ? summaryBio.getBoundingClientRect().top < innerHeight * summaryRevealThreshold
-        : scrollY > innerHeight * (isMobile ? 0.35 : 0.22);
-
-      let next: (typeof navItems)[number]["id"] = "home";
-
-      if (scrollY > innerHeight * 0.22 || summaryInView) {
-        next = "summary";
-        for (const item of navItems.slice(1)) {
-          const el = document.getElementById(item.targetId);
-          if (!el) continue;
-          const sectionTop = el.getBoundingClientRect().top + scrollY;
-          if (sectionTop <= referenceY + 48) {
-            next = item.id;
-          }
-        }
-      }
-
-      setActiveTab((prev) => (prev === next ? prev : next));
-    };
-
-    updateActiveSection();
     let scrollTick = false;
     const onScroll = () => {
       if (scrollTick) return;
       scrollTick = true;
       requestAnimationFrame(() => {
         scrollTick = false;
-        if (scrollLockRef.current) return;
-        if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
-        scrollSpyTimerRef.current = setTimeout(updateActiveSection, 90);
+        updateActiveSection(window.scrollY);
       });
     };
+
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", updateActiveSection);
+    const onResize = () => updateActiveSection(window.scrollY);
+    window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", updateActiveSection);
-      if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
+      window.removeEventListener("resize", onResize);
     };
-  }, [isMounted]);
+  }, [isMounted, lenis, updateActiveSection]);
 
-  /** Hero overlay: update every scroll frame (no debounce) so fast scroll hides immediately. */
   useEffect(() => {
     if (!isMounted) return;
+    const onResize = () => updateActiveSection(lenis?.scroll ?? window.scrollY);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isMounted, lenis, updateActiveSection]);
 
-    const updateHeroOverlay = () => {
-      if (scrollLockRef.current) return;
-      const { scrollY, innerHeight } = window;
+  /** Hero overlay + nav scroll spy: sync with Lenis every frame. */
+  useLenis(
+    (lenisInstance) => {
+      if (!isMounted || scrollLockRef.current) return;
+
+      const scrollY = lenisInstance.scroll;
+      scrollingUpRef.current = scrollY < lastScrollYRef.current - 0.5;
+      lastScrollYRef.current = scrollY;
+      const innerHeight = window.innerHeight;
       const isMobile = window.innerWidth < 768;
       const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
       const summaryTop = document.getElementById("summary-bio")?.getBoundingClientRect().top ?? innerHeight;
-      const nextVisible = shouldShowHeroOverlay(scrollY, innerHeight, isMobile, heroBottom);
-      const elevated = summaryTop <= heroBottom + 24 || scrollY > 56;
+      const footer = document.getElementById("colophon");
+      const footerTop = footer?.getBoundingClientRect().top ?? innerHeight;
+      const nextVisible = shouldShowHeroOverlay(
+        scrollY,
+        innerHeight,
+        isMobile,
+        heroBottom,
+        scrollingUpRef.current,
+      );
+      const elevated =
+        scrollY > (isMobile ? 36 : 48) &&
+        summaryTop <= heroBottom + (scrollingUpRef.current ? 8 : 24);
+      const hideHeroBg =
+        isMobile
+          ? footerTop < innerHeight * 0.92 && scrollY > innerHeight * 0.5
+          : footerTop < innerHeight * 0.55;
+      const showHeroBg = scrollY < innerHeight * (isMobile ? 0.45 : 0.35);
+      const ctaActive = isInHomeSection(isMobile);
+
+      updateActiveSection(scrollY);
+
+      setHeroCtaActive((prev) => (prev === ctaActive ? prev : ctaActive));
+
+      setHeroBgHidden((prev) => {
+        const next = showHeroBg ? false : hideHeroBg;
+        return prev === next ? prev : next;
+      });
       setContentElevated((prev) => (prev === elevated ? prev : elevated));
       setHeroOverlayVisible((prev) => (prev === nextVisible ? prev : nextVisible));
-    };
+    },
+    [isMounted, updateActiveSection],
+    1,
+  );
 
-    updateHeroOverlay();
-    let heroTick = false;
-    const onScrollHero = () => {
-      if (heroTick) return;
-      heroTick = true;
-      requestAnimationFrame(() => {
-        heroTick = false;
-        updateHeroOverlay();
-      });
+  useEffect(() => {
+    if (!isMounted) return;
+    const onResize = () => {
+      const scrollY = lenis?.scroll ?? window.scrollY;
+      const innerHeight = window.innerHeight;
+      const isMobile = window.innerWidth < 768;
+      const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
+      const nextVisible = shouldShowHeroOverlay(scrollY, innerHeight, isMobile, heroBottom);
+      setHeroOverlayVisible(nextVisible);
     };
-
-    window.addEventListener("scroll", onScrollHero, { passive: true });
-    window.addEventListener("resize", updateHeroOverlay);
-    return () => {
-      window.removeEventListener("scroll", onScrollHero);
-      window.removeEventListener("resize", updateHeroOverlay);
-    };
-  }, [isMounted]);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isMounted, lenis]);
 
   /** Hero blur: on as soon as the user scrolls (tiny threshold + hysteresis so it doesn’t flicker at top). */
   useEffect(() => {
@@ -450,41 +506,66 @@ export default function HomeClient({ content }: HomeClientProps) {
     return () => window.removeEventListener("scroll", paint);
   }, [isMounted]);
 
-  useEffect(() => {
-    return () => {
-      cancelScrollRef.current?.();
-    };
-  }, []);
-
   const handleNavClick = useCallback((id: (typeof navItems)[number]["id"]) => {
     const matchingItem = navItems.find((item) => item.id === id);
     if (!matchingItem) return;
     const section = document.getElementById(matchingItem.targetId);
     if (!section) return;
 
-    cancelScrollRef.current?.();
     scrollLockRef.current = true;
     setActiveTab(id);
     setHeroOverlayVisible(id === "home");
+    setHeroCtaActive(id === "home");
     setContentElevated(id !== "home");
+    if (id === "home") {
+      setHeroBgHidden(false);
+    } else if (id === "contact") {
+      setHeroBgHidden(window.innerWidth < 768);
+    }
 
-    if (navReducedMotion) {
-      const targetY = section.getBoundingClientRect().top + window.scrollY - sectionScrollOffset;
+    if (id === "home") {
+      if (navReducedMotion || !lenis) {
+        window.scrollTo({ top: 0, behavior: "auto" });
+        scrollLockRef.current = false;
+        return;
+      }
+
+      lenis.scrollTo(0, {
+        duration: 1.05,
+        easing: (t) => 1 - Math.pow(1 - t, 3),
+        onComplete: () => {
+          scrollLockRef.current = false;
+          setHeroOverlayVisible(true);
+          setContentElevated(false);
+          setHeroBgHidden(false);
+          setHeroCtaActive(true);
+        },
+      });
+      return;
+    }
+
+    const scrollOffset =
+      id === "contact" && window.innerWidth < 768 ? 76 : sectionScrollOffset;
+
+    if (navReducedMotion || !lenis) {
+      const targetY = section.getBoundingClientRect().top + window.scrollY - scrollOffset;
       window.scrollTo({ top: targetY, behavior: "auto" });
       scrollLockRef.current = false;
       return;
     }
 
-    cancelScrollRef.current = smoothScrollToElement(section, {
-      offset: sectionScrollOffset,
+    lenis.scrollTo(section, {
+      offset: -scrollOffset,
+      duration: 1.35,
+      easing: (t) => 1 - Math.pow(1 - t, 3),
       onComplete: () => {
         scrollLockRef.current = false;
-        cancelScrollRef.current = null;
-        setHeroOverlayVisible(id === "home");
-        setContentElevated(id !== "home");
+        setHeroOverlayVisible(false);
+        setHeroCtaActive(false);
+        setContentElevated(true);
       },
     });
-  }, [navReducedMotion]);
+  }, [lenis, navReducedMotion]);
 
   return (
     <motion.main
@@ -492,31 +573,13 @@ export default function HomeClient({ content }: HomeClientProps) {
       style={{ minHeight: "100vh" }}
       className="relative isolate min-h-screen bg-transparent"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter]"
-        style={{ filter: bgBlurActive ? "blur(18px)" : "blur(0px)" }}
-      >
-        <Image
-          src={HOME_BG_MOBILE}
-          alt=""
-          fill
-          priority
-          unoptimized
-          className="object-cover md:hidden"
-          style={{ objectPosition: HOME_BG_OBJECT_POSITION_MOBILE }}
-          sizes="100vw"
-        />
-        <Image
-          src={HOME_BG}
-          alt=""
-          fill
-          priority
-          unoptimized
-          className="hidden object-cover object-center md:block"
-          sizes="100vw"
-        />
-      </div>
+      <ScrollParallaxHeroBg
+        desktopSrc={HOME_BG}
+        mobileSrc={HOME_BG_MOBILE}
+        mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
+        blurred={bgBlurActive}
+        hidden={heroBgHidden}
+      />
 
       <motion.header
         initial="hidden"
@@ -612,7 +675,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       <section
         id="home"
-        className="relative z-10 min-h-screen w-full scroll-mt-28 bg-transparent"
+        className="relative z-10 min-h-[78dvh] w-full scroll-mt-28 bg-transparent sm:min-h-[86dvh] md:min-h-screen"
         aria-label="Home"
       />
 
@@ -624,7 +687,9 @@ export default function HomeClient({ content }: HomeClientProps) {
         animate={heroOverlayVisible ? heroDissolveShow : heroDissolveHide}
         transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
         style={{ transformOrigin: "top right" }}
-        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${contentElevated ? "z-[8]" : "z-[15]"}`}
+        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${
+          !heroOverlayVisible ? "z-[5]" : contentElevated ? "z-[8]" : "z-[15]"
+        }`}
       >
         <motion.div
           aria-hidden
@@ -712,7 +777,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                   <HeroCta
                     label={content.hero.cta?.label ?? "Watch showreel"}
                     href={content.hero.cta?.href ?? ""}
-                    visible={heroOverlayVisible}
+                    visible={heroCtaActive}
                     onHoverChange={setShowreelHover}
                   />
                 </div>
@@ -722,17 +787,13 @@ export default function HomeClient({ content }: HomeClientProps) {
         </div>
       </motion.div>
 
-      <div className={`relative mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
-        <motion.section
+      <div className={`scroll-3d-stage relative mx-auto flex w-full max-w-6xl flex-col gap-14 bg-transparent px-6 pb-16 pt-2 md:gap-20 md:pb-40 md:pt-8 md:[transform-style:preserve-3d] md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+        <ScrollDepthSection
           id="summary"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-8"
+          depth="medium"
+          className="scroll-mt-20 space-y-8 md:scroll-mt-28"
         >
-          <div id="summary-bio" className="scroll-mt-28 flex items-end justify-between">
+          <div id="summary-bio" className="flex items-end justify-between">
             <h2 className={sectionHeadingClass}>{content.summary.title}</h2>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
@@ -749,23 +810,17 @@ export default function HomeClient({ content }: HomeClientProps) {
               </p>
             </div>
           </div>
-        </motion.section>
+        </ScrollDepthSection>
 
-        <HighlightedEditsGallery
-          items={highlightedEdits}
-          isDark={isDark}
-          sectionTitleClass={sectionHeadingClass}
-        />
+        <div className="relative z-20 scroll-mt-28">
+          <HighlightedEditsGallery
+            items={highlightedEdits}
+            isDark={isDark}
+            sectionTitleClass={sectionHeadingClass}
+          />
+        </div>
 
-        <motion.section
-          id="skills"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-6"
-        >
+        <ScrollDepthSection id="skills" depth="medium" className="scroll-mt-28 space-y-6">
           <SkillsTagCloud
             isDark={isDark}
             headingClass={headingClass}
@@ -775,47 +830,43 @@ export default function HomeClient({ content }: HomeClientProps) {
             subtitle={content.skills.subtitle}
             blocks={content.skills.blocks}
           />
-        </motion.section>
+        </ScrollDepthSection>
 
-        <ProductionVault
-          isDark={isDark}
-          mutedClass={cardMutedClass}
-          subheadingClass={subheadingClass}
-          sectionTitleClass={sectionHeadingClass}
-          title={content.vault.title}
-          subtitle={content.vault.subtitle}
-          playlists={content.vault.playlists}
-        />
+        <div className="relative z-20 scroll-mt-28">
+          <ProductionVault
+            isDark={isDark}
+            mutedClass={cardMutedClass}
+            subheadingClass={subheadingClass}
+            sectionTitleClass={sectionHeadingClass}
+            title={content.vault.title}
+            subtitle={content.vault.subtitle}
+            playlists={content.vault.playlists}
+          />
+        </div>
 
-        <motion.section
-          id="experience"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-6"
-        >
+        <ScrollDepthSection id="experience" depth="deep" className="scroll-mt-28 space-y-6">
           <h2 className={sectionHeadingClass}>{content.experience.title}</h2>
           <ExperienceFlipCards isDark={isDark} roles={content.experience.roles} />
-        </motion.section>
+        </ScrollDepthSection>
 
-        <ServicesGlassBento
-          isDark={isDark}
-          headingClass={cardTitleClass}
-          sectionTitleClass={sectionHeadingClass}
-          mutedClass={cardMutedClass}
-          cardSurfaceClass={cardSurfaceClass}
-          title={content.services.title}
-          services={content.services.items}
-        />
+        <div className="relative z-20 scroll-mt-28">
+          <ServicesGlassBento
+            isDark={isDark}
+            headingClass={cardTitleClass}
+            sectionTitleClass={sectionHeadingClass}
+            mutedClass={cardMutedClass}
+            cardSurfaceClass={cardSurfaceClass}
+            title={content.services.title}
+            services={content.services.items}
+          />
+        </div>
 
       </div>
 
       {/* Fade fixed hero portrait into footer black so the figure doesn’t hard-cut at the seam */}
       <div
         aria-hidden
-        className="pointer-events-none relative z-[11] h-28 w-full bg-gradient-to-b from-transparent via-[#0a0a0a]/75 to-[#0A0A0A] md:h-40 md:via-[#0a0a0a]/82"
+        className="pointer-events-none relative z-[11] h-14 w-full bg-gradient-to-b from-transparent via-[#0a0a0a]/80 to-[#0A0A0A] md:h-40 md:via-[#0a0a0a]/82"
       />
 
       <SiteFooter
@@ -853,6 +904,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           ) : null}
           <div
             ref={navScrollRef}
+            data-lenis-prevent
             className="relative z-[2] flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           >
           {navItems.map((item) => {
