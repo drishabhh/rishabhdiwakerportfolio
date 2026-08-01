@@ -1,10 +1,8 @@
 "use client";
 
-import { useGyroParallax } from "@/hooks/use-gyro-parallax";
 import { useLenisPageScrollProgress } from "@/hooks/use-lenis-scroll-progress";
-import { motion, useMotionTemplate, useMotionValueEvent, useReducedMotion, useTransform } from "framer-motion";
+import { motion, useMotionTemplate, useReducedMotion, useTransform } from "framer-motion";
 import Image from "next/image";
-import { useMemo, useState } from "react";
 
 type ScrollParallaxHeroBgProps = {
   desktopSrc: string;
@@ -26,9 +24,6 @@ export function ScrollParallaxHeroBg({
 }: ScrollParallaxHeroBgProps) {
   const reduced = useReducedMotion();
   const scrollYProgress = useLenisPageScrollProgress(!reduced);
-  const gyro = useGyroParallax(!reduced && !hidden);
-  const mobileBaseX = useMemo(() => mobileObjectPosition.trim().split(/\s+/)[0] ?? "-96px", [mobileObjectPosition]);
-  const [mobileGyroPosition, setMobileGyroPosition] = useState(mobileObjectPosition);
 
   const scale = useTransform(scrollYProgress, [0, 0.45, 1], reduced ? [1, 1, 1] : [1, 1.06, 1.1]);
   const y = useTransform(scrollYProgress, [0, 0.45, 1], reduced ? [0, 0, 0] : [0, -28, -42]);
@@ -38,17 +33,6 @@ export function ScrollParallaxHeroBg({
   const vignetteOpacity = useTransform(scrollYProgress, [0, 0.2, 0.55], [0, 0.12, 0.42]);
   const vignetteY = useTransform(scrollYProgress, [0, 0.5], [0, 20]);
   const imageFilter = useMotionTemplate`brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
-
-  useMotionValueEvent(gyro.x, "change", (latest) => {
-    if (mobileBaseX.endsWith("px")) {
-      const px = Number.parseFloat(mobileBaseX);
-      if (Number.isFinite(px)) {
-        setMobileGyroPosition(`calc(${px}px + ${latest * 8}px) center`);
-        return;
-      }
-    }
-    setMobileGyroPosition(mobileObjectPosition);
-  });
 
   return (
     <div
@@ -78,7 +62,7 @@ export function ScrollParallaxHeroBg({
             priority
             unoptimized
             className="object-cover md:hidden"
-            style={{ objectPosition: mobileGyroPosition }}
+            style={{ objectPosition: mobileObjectPosition }}
             sizes="100vw"
           />
           <Image
