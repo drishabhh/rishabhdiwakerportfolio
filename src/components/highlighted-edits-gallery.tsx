@@ -731,7 +731,7 @@ function GalleryHeader({
       >
         Highlighted edits
       </h3>
-      <div className="flex gap-2">
+      <div className="hidden gap-2 md:flex">
         <button
           type="button"
           aria-label="Show previous highlighted edits"
@@ -868,6 +868,7 @@ function HighlightRail({
       />
       <div
         ref={railRef}
+        data-lenis-prevent
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
@@ -1086,6 +1087,7 @@ function DesktopMarquee({
 
       <div
         ref={containerRef}
+        data-lenis-prevent
         className={`relative w-full overflow-hidden py-4 select-none ${
           activeSlot ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}

@@ -1,5 +1,7 @@
 "use client";
 
+import { CinematicSection } from "@/components/cinematic-section";
+import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
@@ -12,10 +14,10 @@ import { SiteFooter } from "@/components/site-footer";
 import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
-import { smoothScrollToElement } from "@/lib/smooth-scroll";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
+import { useLenis } from "lenis/react";
 import Image from "next/image";
 import {
   Archive,
@@ -90,7 +92,7 @@ const heroDissolveHide = {
 
 function heroDissolveTransition(reduced: boolean, mobile: boolean, visible: boolean) {
   if (reduced) return { duration: 0.15, ease: "easeOut" as const };
-  if (!visible) return { duration: mobile ? 0.22 : 0.18, ease: cinematicEase };
+  if (!visible) return { duration: mobile ? 0.42 : 0.38, ease: cinematicEase };
   return { duration: mobile ? 0.58 : 0.48, ease: cinematicEase };
 }
 
@@ -99,20 +101,26 @@ function shouldShowHeroOverlay(
   innerHeight: number,
   isMobile: boolean,
   heroBottom: number,
+  scrollingUp = false,
 ): boolean {
+  const scrollHideThreshold = isMobile ? 56 : 48;
+
+  if (scrollY <= 8) return true;
+
   const summaryBio = document.getElementById("summary-bio");
-  if (!summaryBio) return scrollY < innerHeight * 0.85;
+  if (!summaryBio) return scrollY < innerHeight * 0.22;
 
   const summaryTop = summaryBio.getBoundingClientRect().top;
-  const anchorLine = isMobile ? sectionScrollOffset + 16 : sectionScrollOffset + 32;
-  const overlapPad = isMobile ? 10 : 14;
-  /** Hide at Summary anchor or before hero footprint overlaps section — whichever comes first. */
+  const anchorLine = isMobile ? sectionScrollOffset + 16 : sectionScrollOffset + 28;
+  const overlapPad = isMobile ? 10 : 12;
   const hideLine = Math.max(anchorLine, heroBottom + overlapPad);
-  const showLine = hideLine + (isMobile ? 80 : 104);
+  const showLine = hideLine + (isMobile ? 80 : scrollingUp ? 56 : 88);
 
-  if (summaryTop <= hideLine) return false;
-  if (summaryTop >= showLine || scrollY <= 8) return true;
-  return true;
+  if (!scrollingUp && (scrollY > scrollHideThreshold || summaryTop <= hideLine)) return false;
+  if (scrollingUp && summaryTop <= hideLine - (isMobile ? 18 : 24)) return false;
+  if (summaryTop >= showLine) return true;
+  if (scrollingUp) return scrollY < innerHeight * (isMobile ? 0.58 : 0.48);
+  return scrollY < scrollHideThreshold;
 }
 
 const navItems = [
@@ -136,6 +144,7 @@ const heroTaglineWidthClass =
   "w-full max-w-[min(90vw,500px)] sm:max-w-[min(85vw,540px)] md:max-w-[min(56vw,620px)] lg:max-w-[min(48vw,680px)]";
 
 export default function HomeClient({ content }: HomeClientProps) {
+  const lenis = useLenis();
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
@@ -144,7 +153,9 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [contentElevated, setContentElevated] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const scrollLockRef = useRef(false);
-  const cancelScrollRef = useRef<(() => void) | null>(null);
+  const returningHomeRef = useRef(false);
+  const lastScrollYRef = useRef(0);
+  const scrollingUpRef = useRef(false);
   const heroOverlayRef = useRef<HTMLDivElement>(null);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const navButtonRefs = useRef<Partial<Record<(typeof navItems)[number]["id"], HTMLButtonElement>>>({});
@@ -154,7 +165,6 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [cvLoading, setCvLoading] = useState(false);
   const [cvToastVisible, setCvToastVisible] = useState(false);
   const cvToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollSpyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pillLeft = useSpring(0, navPillSpring);
   const pillWidth = useSpring(48, navPillSpring);
 
@@ -330,161 +340,218 @@ export default function HomeClient({ content }: HomeClientProps) {
     return () => window.removeEventListener("resize", syncMobile);
   }, []);
 
+  const updateActiveSection = useCallback((scrollY: number) => {
+    if (scrollLockRef.current) return;
+
+    const { innerHeight } = window;
+    const isMobile = window.innerWidth < 768;
+    const anchorLine = innerHeight * (isMobile ? 0.34 : 0.3);
+
+    const summaryBio = document.getElementById("summary-bio");
+    const summaryTop = summaryBio?.getBoundingClientRect().top ?? innerHeight;
+    const scrollingUp = scrollingUpRef.current;
+
+    let next: (typeof navItems)[number]["id"] = "home";
+
+    const homeByScroll = scrollY <= innerHeight * (isMobile ? 0.1 : 0.16);
+    const homeBySummaryClear = summaryTop > innerHeight * (isMobile ? 0.48 : 0.42);
+
+    if (homeByScroll || (scrollingUp && homeBySummaryClear)) {
+      next = "home";
+    } else if (scrollY > innerHeight * (isMobile ? 0.16 : 0.22) || summaryTop < innerHeight * (isMobile ? 0.38 : 0.68)) {
+      next = "summary";
+      for (const item of navItems.slice(1)) {
+        const el = document.getElementById(item.targetId);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= anchorLine) {
+          next = item.id;
+        }
+      }
+    }
+
+    const footer = document.getElementById("colophon");
+    if (footer && footer.getBoundingClientRect().top <= anchorLine + (isMobile ? 20 : 40)) {
+      next = "contact";
+    }
+
+    setActiveTab((prev) => (prev === next ? prev : next));
+  }, []);
+
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || lenis) return;
 
-    const updateActiveSection = () => {
-      if (scrollLockRef.current) return;
+    updateActiveSection(window.scrollY);
 
-      const { scrollY, innerHeight } = window;
-      const docHeight = document.documentElement.scrollHeight;
-
-      const footer = document.getElementById("colophon");
-      if (footer) {
-        const footerTop = footer.getBoundingClientRect().top;
-        if (footerTop <= innerHeight * 0.55 || scrollY + innerHeight >= docHeight - 100) {
-          setActiveTab((prev) => (prev === "contact" ? prev : "contact"));
-          return;
-        }
-      }
-
-      const isMobile = window.innerWidth < 768;
-      const summaryRevealThreshold = isMobile ? 0.38 : 0.68;
-      const referenceY = scrollY + innerHeight * 0.28;
-      const summaryBio = document.getElementById("summary-bio");
-      const summaryInView = summaryBio
-        ? summaryBio.getBoundingClientRect().top < innerHeight * summaryRevealThreshold
-        : scrollY > innerHeight * (isMobile ? 0.35 : 0.22);
-
-      let next: (typeof navItems)[number]["id"] = "home";
-
-      if (scrollY > innerHeight * 0.22 || summaryInView) {
-        next = "summary";
-        for (const item of navItems.slice(1)) {
-          const el = document.getElementById(item.targetId);
-          if (!el) continue;
-          const sectionTop = el.getBoundingClientRect().top + scrollY;
-          if (sectionTop <= referenceY + 48) {
-            next = item.id;
-          }
-        }
-      }
-
-      setActiveTab((prev) => (prev === next ? prev : next));
-    };
-
-    updateActiveSection();
     let scrollTick = false;
     const onScroll = () => {
       if (scrollTick) return;
       scrollTick = true;
       requestAnimationFrame(() => {
         scrollTick = false;
-        if (scrollLockRef.current) return;
-        if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
-        scrollSpyTimerRef.current = setTimeout(updateActiveSection, 90);
+        updateActiveSection(window.scrollY);
       });
     };
+
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", updateActiveSection);
+    const onResize = () => updateActiveSection(window.scrollY);
+    window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", updateActiveSection);
-      if (scrollSpyTimerRef.current) clearTimeout(scrollSpyTimerRef.current);
+      window.removeEventListener("resize", onResize);
     };
-  }, [isMounted]);
+  }, [isMounted, lenis, updateActiveSection]);
 
-  /** Hero overlay: update every scroll frame (no debounce) so fast scroll hides immediately. */
-  useEffect(() => {
-    if (!isMounted) return;
+  const syncScrollFrame = useCallback(
+    (scrollY: number) => {
+      if (!isMounted) return;
 
-    const updateHeroOverlay = () => {
-      if (scrollLockRef.current) return;
-      const { scrollY, innerHeight } = window;
-      const isMobile = window.innerWidth < 768;
-      const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
-      const summaryTop = document.getElementById("summary-bio")?.getBoundingClientRect().top ?? innerHeight;
-      const nextVisible = shouldShowHeroOverlay(scrollY, innerHeight, isMobile, heroBottom);
-      const elevated = summaryTop <= heroBottom + 24 || scrollY > 56;
-      setContentElevated((prev) => (prev === elevated ? prev : elevated));
-      setHeroOverlayVisible((prev) => (prev === nextVisible ? prev : nextVisible));
-    };
-
-    updateHeroOverlay();
-    let heroTick = false;
-    const onScrollHero = () => {
-      if (heroTick) return;
-      heroTick = true;
-      requestAnimationFrame(() => {
-        heroTick = false;
-        updateHeroOverlay();
-      });
-    };
-
-    window.addEventListener("scroll", onScrollHero, { passive: true });
-    window.addEventListener("resize", updateHeroOverlay);
-    return () => {
-      window.removeEventListener("scroll", onScrollHero);
-      window.removeEventListener("resize", updateHeroOverlay);
-    };
-  }, [isMounted]);
-
-  /** Hero blur: on as soon as the user scrolls (tiny threshold + hysteresis so it doesn’t flicker at top). */
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const on = 6;
-    const off = 2;
-
-    const paint = () => {
-      const y = window.scrollY || document.documentElement.scrollTop;
       setBgBlurActive((prev) => {
-        if (y > on) return true;
-        if (y < off) return false;
+        if (returningHomeRef.current) return false;
+        if (scrollY > 6) return true;
+        if (scrollY < 2) return false;
         return prev;
       });
+
+      const innerHeight = window.innerHeight;
+      const isMobile = window.innerWidth < 768;
+      const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
+
+      if (!scrollLockRef.current) {
+        scrollingUpRef.current = scrollY < lastScrollYRef.current - 0.5;
+        lastScrollYRef.current = scrollY;
+      }
+
+      const nextVisible = returningHomeRef.current
+        ? true
+        : shouldShowHeroOverlay(
+            scrollY,
+            innerHeight,
+            isMobile,
+            heroBottom,
+            scrollingUpRef.current,
+          );
+      setHeroOverlayVisible((prev) => (prev === nextVisible ? prev : nextVisible));
+
+      if (scrollLockRef.current) return;
+
+      const summaryTop = document.getElementById("summary-bio")?.getBoundingClientRect().top ?? innerHeight;
+      const elevated =
+        scrollY > (isMobile ? 36 : 48) &&
+        summaryTop <= heroBottom + (scrollingUpRef.current ? 8 : 24);
+
+      updateActiveSection(scrollY);
+
+      setContentElevated((prev) => (prev === elevated ? prev : elevated));
+    },
+    [isMounted, updateActiveSection],
+  );
+
+  /** Native scroll sync — mobile uses native scroll (no Lenis). */
+  useEffect(() => {
+    if (!isMounted || lenis) return;
+
+    let raf = 0;
+    const tick = () => {
+      syncScrollFrame(window.scrollY);
+      raf = requestAnimationFrame(tick);
     };
 
-    paint();
-    window.addEventListener("scroll", paint, { passive: true });
-    return () => window.removeEventListener("scroll", paint);
-  }, [isMounted]);
+    syncScrollFrame(window.scrollY);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isMounted, lenis, syncScrollFrame]);
 
   useEffect(() => {
-    return () => {
-      cancelScrollRef.current?.();
+    if (!isMounted) return;
+    const onResize = () => updateActiveSection(lenis?.scroll ?? window.scrollY);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isMounted, lenis, updateActiveSection]);
+
+  /** Hero overlay + nav scroll spy: sync with Lenis every frame (desktop). */
+  useLenis(
+    (lenisInstance) => {
+      syncScrollFrame(lenisInstance.scroll);
+    },
+    [syncScrollFrame],
+    1,
+  );
+
+  useEffect(() => {
+    if (!isMounted) return;
+    const onResize = () => {
+      const scrollY = lenis?.scroll ?? window.scrollY;
+      const innerHeight = window.innerHeight;
+      const isMobile = window.innerWidth < 768;
+      const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
+      const nextVisible = shouldShowHeroOverlay(scrollY, innerHeight, isMobile, heroBottom);
+      setHeroOverlayVisible(nextVisible);
     };
-  }, []);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [isMounted, lenis]);
 
-  const handleNavClick = useCallback((id: (typeof navItems)[number]["id"]) => {
-    const matchingItem = navItems.find((item) => item.id === id);
-    if (!matchingItem) return;
-    const section = document.getElementById(matchingItem.targetId);
-    if (!section) return;
+  const handleNavClick = useCallback(
+    (id: (typeof navItems)[number]["id"]) => {
+      const matchingItem = navItems.find((item) => item.id === id);
+      if (!matchingItem) return;
+      const section = document.getElementById(matchingItem.targetId);
+      if (!section) return;
 
-    cancelScrollRef.current?.();
-    scrollLockRef.current = true;
-    setActiveTab(id);
-    setHeroOverlayVisible(id === "home");
-    setContentElevated(id !== "home");
+      scrollLockRef.current = true;
+      setActiveTab(id);
+      setHeroOverlayVisible(id === "home");
+      setContentElevated(id !== "home");
 
-    if (navReducedMotion) {
-      const targetY = section.getBoundingClientRect().top + window.scrollY - sectionScrollOffset;
-      window.scrollTo({ top: targetY, behavior: "auto" });
-      scrollLockRef.current = false;
-      return;
-    }
+      if (id === "home") {
+        returningHomeRef.current = true;
+        setBgBlurActive(false);
 
-    cancelScrollRef.current = smoothScrollToElement(section, {
-      offset: sectionScrollOffset,
-      onComplete: () => {
+        if (navReducedMotion || !lenis) {
+          window.scrollTo({ top: 0, behavior: "auto" });
+          scrollLockRef.current = false;
+          returningHomeRef.current = false;
+          setBgBlurActive(false);
+          return;
+        }
+
+        lenis.scrollTo(0, {
+          duration: 1.05,
+          easing: (t) => 1 - Math.pow(1 - t, 3),
+          onComplete: () => {
+            scrollLockRef.current = false;
+            returningHomeRef.current = false;
+            setHeroOverlayVisible(true);
+            setContentElevated(false);
+            setBgBlurActive(false);
+          },
+        });
+        return;
+      }
+
+      const scrollOffset =
+        id === "contact" && window.innerWidth < 768 ? 76 : sectionScrollOffset;
+
+      if (navReducedMotion || !lenis) {
+        const targetY = section.getBoundingClientRect().top + window.scrollY - scrollOffset;
+        window.scrollTo({ top: targetY, behavior: "auto" });
         scrollLockRef.current = false;
-        cancelScrollRef.current = null;
-        setHeroOverlayVisible(id === "home");
-        setContentElevated(id !== "home");
-      },
-    });
-  }, [navReducedMotion]);
+        return;
+      }
+
+      lenis.scrollTo(section, {
+        offset: -scrollOffset,
+        duration: 1.35,
+        easing: (t) => 1 - Math.pow(1 - t, 3),
+        onComplete: () => {
+          scrollLockRef.current = false;
+          setHeroOverlayVisible(false);
+          setContentElevated(true);
+        },
+      });
+    },
+    [lenis, navReducedMotion],
+  );
 
   return (
     <motion.main
@@ -492,31 +559,12 @@ export default function HomeClient({ content }: HomeClientProps) {
       style={{ minHeight: "100vh" }}
       className="relative isolate min-h-screen bg-transparent"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter] duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter]"
-        style={{ filter: bgBlurActive ? "blur(18px)" : "blur(0px)" }}
-      >
-        <Image
-          src={HOME_BG_MOBILE}
-          alt=""
-          fill
-          priority
-          unoptimized
-          className="object-cover md:hidden"
-          style={{ objectPosition: HOME_BG_OBJECT_POSITION_MOBILE }}
-          sizes="100vw"
-        />
-        <Image
-          src={HOME_BG}
-          alt=""
-          fill
-          priority
-          unoptimized
-          className="hidden object-cover object-center md:block"
-          sizes="100vw"
-        />
-      </div>
+      <ScrollParallaxHeroBg
+        desktopSrc={HOME_BG}
+        mobileSrc={HOME_BG_MOBILE}
+        mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
+        blurred={bgBlurActive}
+      />
 
       <motion.header
         initial="hidden"
@@ -624,7 +672,9 @@ export default function HomeClient({ content }: HomeClientProps) {
         animate={heroOverlayVisible ? heroDissolveShow : heroDissolveHide}
         transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
         style={{ transformOrigin: "top right" }}
-        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${contentElevated ? "z-[8]" : "z-[15]"}`}
+        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${
+          !heroOverlayVisible ? "invisible z-[5]" : contentElevated ? "z-[8]" : "z-[15]"
+        }`}
       >
         <motion.div
           aria-hidden
@@ -640,7 +690,7 @@ export default function HomeClient({ content }: HomeClientProps) {
               ? { duration: 0.15 }
               : heroOverlayVisible
                 ? { duration: 0.2 }
-                : { duration: 0.28, ease: cinematicEase, times: [0, 0.35, 1] }
+                : { duration: 0.4, ease: cinematicEase, times: [0, 0.35, 1] }
           }
           style={{
             background:
@@ -722,20 +772,16 @@ export default function HomeClient({ content }: HomeClientProps) {
         </div>
       </motion.div>
 
-      <div className={`relative mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
-        <motion.section
+      <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+        <CinematicSection
           id="summary"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-8"
+          depth="medium"
+          className="scroll-mt-28 flex flex-col gap-10 pt-2 md:gap-14 md:pt-4"
         >
-          <div id="summary-bio" className="scroll-mt-28 flex items-end justify-between">
+          <div id="summary-bio" className="scroll-mt-28">
             <h2 className={sectionHeadingClass}>{content.summary.title}</h2>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2 md:gap-6">
             <div className={`rounded-2xl border p-6 ${cardSurfaceClass}`}>
               <p className={cardSubheadingClass}>Professional Profile</p>
               <p className={`mt-3 text-sm leading-relaxed md:text-base ${cardMutedClass}`}>
@@ -749,7 +795,7 @@ export default function HomeClient({ content }: HomeClientProps) {
               </p>
             </div>
           </div>
-        </motion.section>
+        </CinematicSection>
 
         <HighlightedEditsGallery
           items={highlightedEdits}
@@ -757,15 +803,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           sectionTitleClass={sectionHeadingClass}
         />
 
-        <motion.section
-          id="skills"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-6"
-        >
+        <CinematicSection id="skills" depth="medium" className="scroll-mt-28 flex flex-col gap-6 md:gap-8">
           <SkillsTagCloud
             isDark={isDark}
             headingClass={headingClass}
@@ -775,7 +813,7 @@ export default function HomeClient({ content }: HomeClientProps) {
             subtitle={content.skills.subtitle}
             blocks={content.skills.blocks}
           />
-        </motion.section>
+        </CinematicSection>
 
         <ProductionVault
           isDark={isDark}
@@ -853,6 +891,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           ) : null}
           <div
             ref={navScrollRef}
+            data-lenis-prevent
             className="relative z-[2] flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           >
           {navItems.map((item) => {

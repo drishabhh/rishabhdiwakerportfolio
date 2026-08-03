@@ -51,7 +51,46 @@
   stroke: rgba(39, 39, 42, 0.96) !important;
 }
 
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
 /* Hero TextLoop fonts: `--font-syne`, `--font-space-mono`, etc. (see layout). */
+
+/* Premium scroll-stage: enables 3D depth on child sections while scrolling (desktop) */
+.scroll-3d-stage {
+  overflow: visible;
+}
+
+@media (min-width: 768px) {
+  .scroll-3d-stage {
+    perspective: 1400px;
+    perspective-origin: 50% 38%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-3d-stage {
+    perspective: none;
+  }
+}
 
 * {
   box-sizing: border-box;
