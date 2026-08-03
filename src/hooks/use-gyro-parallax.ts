@@ -3,10 +3,10 @@
 import { useAnimationFrame, useMotionValue, type MotionValue } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const LERP = 0.12;
-const GAMMA_RANGE = 26;
+const LERP = 0.18;
+const GAMMA_RANGE = 16;
 const BETA_NEUTRAL = 48;
-const BETA_RANGE = 22;
+const BETA_RANGE = 14;
 
 type DeviceOrientationEventWithPermission = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<PermissionState>;

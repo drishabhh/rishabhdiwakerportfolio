@@ -10,8 +10,8 @@ const HOME_BG = "/hero/home-bg.jpg";
 
 export function TestLabClient() {
   const gyro = useGyroParallax({ enabled: true, mobileOnly: false });
-  const shiftX = useTransform(gyro.x, (v) => v * 28);
-  const shiftY = useTransform(gyro.y, (v) => v * 20);
+  const shiftX = useTransform(gyro.x, (v) => v * 44);
+  const shiftY = useTransform(gyro.y, (v) => v * 32);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
   useMotionValueEvent(gyro.x, "change", (x) => {
