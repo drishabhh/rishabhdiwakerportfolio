@@ -1,7 +1,7 @@
 "use client";
 
+import { HeroBackground } from "@/components/hero-background";
 import { CinematicSection } from "@/components/cinematic-section";
-import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
@@ -15,6 +15,7 @@ import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
+import { smoothScrollToY } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
@@ -123,6 +124,16 @@ function shouldShowHeroOverlay(
   return scrollY < scrollHideThreshold;
 }
 
+/** Hero background blur — strict on/off (no hysteresis flicker). */
+const HERO_BLUR_ON_Y_MOBILE = 28;
+const HERO_BLUR_ON_Y_DESKTOP = 36;
+
+function shouldBlurHeroBackground(scrollY: number, isMobile: boolean, returningHome: boolean): boolean {
+  if (returningHome) return false;
+  const threshold = isMobile ? HERO_BLUR_ON_Y_MOBILE : HERO_BLUR_ON_Y_DESKTOP;
+  return scrollY > threshold;
+}
+
 const navItems = [
   { id: "home", label: "Home", icon: House, targetId: "home" },
   { id: "summary", label: "Summary", icon: FileText, targetId: "summary-bio" },
@@ -137,6 +148,7 @@ const navItems = [
 const HOME_BG = "/hero/home-bg.jpg";
 const HOME_BG_MOBILE = "/hero/home-bg.jpg";
 const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
+const HOME_BG_OBJECT_POSITION_DESKTOP = "center";
 const HOME_HERO_LOGO = "/hero-logo.png";
 
 /** Hero tagline: width tracks logo breakpoints. */
@@ -154,6 +166,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [isMobileView, setIsMobileView] = useState(false);
   const scrollLockRef = useRef(false);
   const returningHomeRef = useRef(false);
+  const cancelScrollRef = useRef<(() => void) | null>(null);
   const lastScrollYRef = useRef(0);
   const scrollingUpRef = useRef(false);
   const heroOverlayRef = useRef<HTMLDivElement>(null);
@@ -273,6 +286,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const cardMutedClass = isDark ? "text-zinc-300" : "text-zinc-600";
   /** Service card titles on glass (dark vs light glass). */
   const cardTitleClass = isDark ? headingClass : "text-zinc-950 title-glow-opposite-dark-text";
+  const useHeroWebGL = isMounted && !isMobileView && !navReducedMotion;
   /** Header row (theme-aware). */
   const headerSurfaceClass = isDark
     ? "border-b border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md"
@@ -405,20 +419,15 @@ export default function HomeClient({ content }: HomeClientProps) {
     (scrollY: number) => {
       if (!isMounted) return;
 
-      setBgBlurActive((prev) => {
-        if (returningHomeRef.current) return false;
-        if (scrollY > 6) return true;
-        if (scrollY < 2) return false;
-        return prev;
-      });
-
       const innerHeight = window.innerHeight;
       const isMobile = window.innerWidth < 768;
       const heroBottom = heroOverlayRef.current?.getBoundingClientRect().bottom ?? 0;
+      const scrollingUp = scrollY < lastScrollYRef.current - 0.5;
 
       if (!scrollLockRef.current) {
-        scrollingUpRef.current = scrollY < lastScrollYRef.current - 0.5;
+        scrollingUpRef.current = scrollingUp;
         lastScrollYRef.current = scrollY;
+        setBgBlurActive(shouldBlurHeroBackground(scrollY, isMobile, returningHomeRef.current));
       }
 
       const nextVisible = returningHomeRef.current
@@ -491,6 +500,12 @@ export default function HomeClient({ content }: HomeClientProps) {
     return () => window.removeEventListener("resize", onResize);
   }, [isMounted, lenis]);
 
+  useEffect(() => {
+    return () => {
+      cancelScrollRef.current?.();
+    };
+  }, []);
+
   const handleNavClick = useCallback(
     (id: (typeof navItems)[number]["id"]) => {
       const matchingItem = navItems.find((item) => item.id === id);
@@ -498,6 +513,8 @@ export default function HomeClient({ content }: HomeClientProps) {
       const section = document.getElementById(matchingItem.targetId);
       if (!section) return;
 
+      cancelScrollRef.current?.();
+      cancelScrollRef.current = null;
       scrollLockRef.current = true;
       setActiveTab(id);
       setHeroOverlayVisible(id === "home");
@@ -508,6 +525,21 @@ export default function HomeClient({ content }: HomeClientProps) {
         setBgBlurActive(false);
 
         if (navReducedMotion || !lenis) {
+          if (!navReducedMotion && window.innerWidth < 768) {
+            cancelScrollRef.current = smoothScrollToY(0, {
+              duration: 680,
+              onComplete: () => {
+                scrollLockRef.current = false;
+                returningHomeRef.current = false;
+                cancelScrollRef.current = null;
+                setBgBlurActive(false);
+                setHeroOverlayVisible(true);
+                setContentElevated(false);
+              },
+            });
+            return;
+          }
+
           window.scrollTo({ top: 0, behavior: "auto" });
           scrollLockRef.current = false;
           returningHomeRef.current = false;
@@ -529,6 +561,9 @@ export default function HomeClient({ content }: HomeClientProps) {
         return;
       }
 
+      returningHomeRef.current = false;
+      setBgBlurActive(true);
+
       const scrollOffset =
         id === "contact" && window.innerWidth < 768 ? 76 : sectionScrollOffset;
 
@@ -536,6 +571,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         const targetY = section.getBoundingClientRect().top + window.scrollY - scrollOffset;
         window.scrollTo({ top: targetY, behavior: "auto" });
         scrollLockRef.current = false;
+        setBgBlurActive(shouldBlurHeroBackground(targetY, window.innerWidth < 768, false));
         return;
       }
 
@@ -547,6 +583,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           scrollLockRef.current = false;
           setHeroOverlayVisible(false);
           setContentElevated(true);
+          setBgBlurActive(true);
         },
       });
     },
@@ -559,11 +596,13 @@ export default function HomeClient({ content }: HomeClientProps) {
       style={{ minHeight: "100vh" }}
       className="relative isolate min-h-screen bg-transparent"
     >
-      <ScrollParallaxHeroBg
+      <HeroBackground
         desktopSrc={HOME_BG}
         mobileSrc={HOME_BG_MOBILE}
         mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
+        desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}
         blurred={bgBlurActive}
+        useWebGL={useHeroWebGL}
       />
 
       <motion.header

@@ -12,6 +12,8 @@ type ScrollParallaxHeroBgProps = {
   blurred: boolean;
   /** Fade out fixed hero once footer enters view (mobile contact seam). */
   hidden?: boolean;
+  /** Hide desktop image when WebGL hero is active */
+  hideDesktopImage?: boolean;
 };
 
 export function ScrollParallaxHeroBg({
@@ -21,6 +23,7 @@ export function ScrollParallaxHeroBg({
   desktopObjectPosition = "center",
   blurred,
   hidden = false,
+  hideDesktopImage = false,
 }: ScrollParallaxHeroBgProps) {
   const reduced = useReducedMotion();
   const scrollYProgress = useNativePageScrollProgress(!reduced);
@@ -37,7 +40,9 @@ export function ScrollParallaxHeroBg({
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter,opacity] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter,opacity]"
+      className={`pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter,opacity] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter,opacity]${hideDesktopImage ? " md:hidden" : ""} ${
+        blurred ? "duration-400" : "duration-150"
+      }`}
       style={{
         filter: blurred
           ? `blur(18px)${reduced ? " brightness(1.16) contrast(1.05) saturate(1.06)" : ""}`
@@ -71,7 +76,7 @@ export function ScrollParallaxHeroBg({
             fill
             priority
             unoptimized
-            className="hidden object-cover object-center md:block"
+            className={hideDesktopImage ? "hidden" : "hidden object-cover object-center md:block"}
             style={{ objectPosition: desktopObjectPosition }}
             sizes="100vw"
           />
