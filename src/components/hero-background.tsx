@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Component, useState, type ReactNode } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
 
 const HeroWebGLScene = dynamic(
@@ -37,6 +37,8 @@ export type HeroBackgroundProps = {
   blurred: boolean;
   hidden?: boolean;
   useWebGL: boolean;
+  /** Hold hero at opacity 0 until client mount (avoids CSS flash before WebGL path is chosen). */
+  entranceLocked?: boolean;
 };
 
 export function HeroBackground({
@@ -45,11 +47,35 @@ export function HeroBackground({
   mobileObjectPosition,
   desktopObjectPosition = "center",
   blurred,
-  hidden,
+  hidden = false,
   useWebGL,
+  entranceLocked = false,
 }: HeroBackgroundProps) {
   const [webglFailed, setWebglFailed] = useState(false);
+  const [webglReady, setWebglReady] = useState(false);
+  const [mobileLoaded, setMobileLoaded] = useState(false);
+  const [desktopLoaded, setDesktopLoaded] = useState(false);
+  const [isMobile, setIsMobile] = useState(true);
+
   const activeWebGL = useWebGL && !webglFailed;
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (!activeWebGL) setWebglReady(false);
+  }, [activeWebGL]);
+
+  const cssImagesReady = activeWebGL ? mobileLoaded : mobileLoaded && desktopLoaded;
+  const cssVisibleOnViewport = !activeWebGL || webglFailed || isMobile;
+  const revealCss =
+    !entranceLocked && !hidden && cssVisibleOnViewport && cssImagesReady;
+  const revealWebGL = !entranceLocked && !hidden && activeWebGL && webglReady;
 
   return (
     <>
@@ -60,6 +86,8 @@ export function HeroBackground({
             objectPosition={desktopObjectPosition}
             blurred={blurred}
             hidden={hidden}
+            reveal={revealWebGL}
+            onReady={() => setWebglReady(true)}
           />
         </WebGLErrorBoundary>
       ) : null}
@@ -70,7 +98,10 @@ export function HeroBackground({
         desktopObjectPosition={desktopObjectPosition}
         blurred={blurred}
         hidden={hidden}
+        reveal={revealCss}
         hideDesktopImage={activeWebGL}
+        onMobileLoaded={() => setMobileLoaded(true)}
+        onDesktopLoaded={() => setDesktopLoaded(true)}
       />
     </>
   );

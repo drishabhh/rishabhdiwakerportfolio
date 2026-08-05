@@ -3,6 +3,7 @@
 import { useNativePageScrollProgress } from "@/hooks/use-native-scroll-progress";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
+import { motion, useReducedMotion } from "framer-motion";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -11,6 +12,8 @@ type HeroWebGLSceneProps = {
   objectPosition?: string;
   blurred: boolean;
   hidden?: boolean;
+  reveal?: boolean;
+  onReady?: () => void;
 };
 
 function parseHorizontalObjectPosition(objectPosition: string, imageWidth: number): number {
@@ -31,7 +34,15 @@ function parseHorizontalObjectPosition(objectPosition: string, imageWidth: numbe
   return 0.5;
 }
 
-function HeroImagePlane({ imageSrc, objectPosition = "center" }: { imageSrc: string; objectPosition?: string }) {
+function HeroImagePlane({
+  imageSrc,
+  objectPosition = "center",
+  onReady,
+}: {
+  imageSrc: string;
+  objectPosition?: string;
+  onReady?: () => void;
+}) {
   const texture = useTexture(imageSrc);
   const meshRef = useRef<THREE.Mesh>(null);
   const progress = useNativePageScrollProgress(true);
@@ -42,7 +53,8 @@ function HeroImagePlane({ imageSrc, objectPosition = "center" }: { imageSrc: str
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
-  }, [texture]);
+    onReady?.();
+  }, [texture, onReady]);
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -177,35 +189,52 @@ function CinematicParticles() {
   );
 }
 
-function HeroSceneContent({ imageSrc, objectPosition }: { imageSrc: string; objectPosition?: string }) {
+function HeroSceneContent({
+  imageSrc,
+  objectPosition,
+  onReady,
+}: {
+  imageSrc: string;
+  objectPosition?: string;
+  onReady?: () => void;
+}) {
   return (
     <>
       <color attach="background" args={["#0a0a0a"]} />
       <ambientLight intensity={0.52} />
       <directionalLight position={[4, 6, 8]} intensity={0.62} color="#fff8f2" />
-      <HeroImagePlane imageSrc={imageSrc} objectPosition={objectPosition} />
+      <HeroImagePlane imageSrc={imageSrc} objectPosition={objectPosition} onReady={onReady} />
       <CinematicParticles />
     </>
   );
 }
+
+const HERO_BG_ENTRANCE_MS = 0.3;
+const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 export function HeroWebGLScene({
   imageSrc,
   objectPosition = "center",
   blurred,
   hidden = false,
+  reveal = false,
+  onReady,
 }: HeroWebGLSceneProps) {
+  const reduced = Boolean(useReducedMotion());
+
   return (
-    <div
+    <motion.div
       aria-hidden
-      className={`pointer-events-none fixed inset-0 z-0 hidden min-h-[100dvh] w-screen overflow-hidden transition-[filter,opacity] ease-[cubic-bezier(0.22,1,0.36,1)] md:block ${
+      initial={false}
+      animate={{ opacity: hidden ? 0 : reveal ? 1 : 0 }}
+      transition={{ duration: reduced ? 0.12 : HERO_BG_ENTRANCE_MS, ease: cinematicEase }}
+      className={`pointer-events-none fixed inset-0 z-0 hidden min-h-[100dvh] w-screen overflow-hidden md:block transition-[filter] ease-[cubic-bezier(0.22,1,0.36,1)] ${
         blurred ? "duration-400" : "duration-150"
       }`}
       style={{
         filter: blurred
           ? "blur(18px) brightness(1.16) contrast(1.05) saturate(1.06)"
           : "brightness(1.16) contrast(1.05) saturate(1.06)",
-        opacity: hidden ? 0 : 1,
       }}
     >
       <Canvas
@@ -215,7 +244,11 @@ export function HeroWebGLScene({
         camera={{ position: [0, 0, 5.2], fov: 42, near: 0.1, far: 100 }}
       >
         <Suspense fallback={null}>
-          <HeroSceneContent imageSrc={imageSrc} objectPosition={objectPosition} />
+          <HeroSceneContent
+            imageSrc={imageSrc}
+            objectPosition={objectPosition}
+            onReady={onReady}
+          />
         </Suspense>
       </Canvas>
 
@@ -232,6 +265,6 @@ export function HeroWebGLScene({
         aria-hidden
         className="absolute inset-0 bg-[radial-gradient(ellipse_80%_65%_at_72%_38%,transparent_0%,rgba(0,0,0,0.1)_55%,rgba(0,0,0,0.32)_100%)]"
       />
-    </div>
+    </motion.div>
   );
 }

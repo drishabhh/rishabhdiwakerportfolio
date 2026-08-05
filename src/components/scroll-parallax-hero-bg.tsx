@@ -4,6 +4,9 @@ import { useNativePageScrollProgress } from "@/hooks/use-native-scroll-progress"
 import { motion, useMotionTemplate, useReducedMotion, useTransform } from "framer-motion";
 import Image from "next/image";
 
+const HERO_BG_ENTRANCE_MS = 0.3;
+const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
 type ScrollParallaxHeroBgProps = {
   desktopSrc: string;
   mobileSrc: string;
@@ -12,8 +15,12 @@ type ScrollParallaxHeroBgProps = {
   blurred: boolean;
   /** Fade out fixed hero once footer enters view (mobile contact seam). */
   hidden?: boolean;
+  /** Parent-controlled entrance (single coordinated reveal). */
+  reveal?: boolean;
   /** Hide desktop image when WebGL hero is active */
   hideDesktopImage?: boolean;
+  onMobileLoaded?: () => void;
+  onDesktopLoaded?: () => void;
 };
 
 export function ScrollParallaxHeroBg({
@@ -23,7 +30,10 @@ export function ScrollParallaxHeroBg({
   desktopObjectPosition = "center",
   blurred,
   hidden = false,
+  reveal = false,
   hideDesktopImage = false,
+  onMobileLoaded,
+  onDesktopLoaded,
 }: ScrollParallaxHeroBgProps) {
   const reduced = useReducedMotion();
   const scrollYProgress = useNativePageScrollProgress(!reduced);
@@ -38,9 +48,12 @@ export function ScrollParallaxHeroBg({
   const imageFilter = useMotionTemplate`brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
 
   return (
-    <div
+    <motion.div
       aria-hidden
-      className={`pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter,opacity] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter,opacity]${hideDesktopImage ? " md:hidden" : ""} ${
+      initial={false}
+      animate={{ opacity: hidden ? 0 : reveal ? 1 : 0 }}
+      transition={{ duration: reduced ? 0.12 : HERO_BG_ENTRANCE_MS, ease: cinematicEase }}
+      className={`pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter,opacity]${hideDesktopImage ? " md:hidden" : ""} ${
         blurred ? "duration-400" : "duration-150"
       }`}
       style={{
@@ -49,7 +62,6 @@ export function ScrollParallaxHeroBg({
           : reduced
             ? "brightness(1.16) contrast(1.05) saturate(1.06)"
             : undefined,
-        opacity: hidden ? 0 : 1,
       }}
     >
       <motion.div
@@ -66,6 +78,7 @@ export function ScrollParallaxHeroBg({
             fill
             priority
             unoptimized
+            onLoad={() => onMobileLoaded?.()}
             className="object-cover md:hidden"
             style={{ objectPosition: mobileObjectPosition }}
             sizes="100vw"
@@ -76,6 +89,7 @@ export function ScrollParallaxHeroBg({
             fill
             priority
             unoptimized
+            onLoad={() => onDesktopLoaded?.()}
             className={hideDesktopImage ? "hidden" : "hidden object-cover object-center md:block"}
             style={{ objectPosition: desktopObjectPosition }}
             sizes="100vw"
@@ -100,6 +114,6 @@ export function ScrollParallaxHeroBg({
           y: vignetteY,
         }}
       />
-    </div>
+    </motion.div>
   );
 }

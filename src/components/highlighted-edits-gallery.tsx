@@ -771,9 +771,6 @@ function GalleryHeader({
 
 const CARD_STEP = 220 + 16;
 const MARQUEE_SPEED_PX_PER_SEC = 72;
-/** Left/right edge of the track — cursor here drives scroll direction. */
-const MARQUEE_EDGE_RATIO = 0.2;
-const MARQUEE_EDGE_SPEED = 0.85;
 const MARQUEE_DRAG_THRESHOLD_PX = 6;
 
 type StripId = "a" | "b";
@@ -868,7 +865,6 @@ function HighlightRail({
       />
       <div
         ref={railRef}
-        data-lenis-prevent
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
@@ -942,12 +938,20 @@ function DesktopMarquee({
   }, [itemCount, activeSlot]);
 
   useEffect(() => {
-    if (activeSlot !== null) {
+    if (activeSlot !== null && !playbackPaused) {
       speedTargetRef.current = 0;
       return;
     }
-    if (!hoveredRef.current) speedTargetRef.current = 1;
-  }, [activeSlot]);
+    speedTargetRef.current = hoveredRef.current && activeSlot === null ? 0 : 1;
+  }, [activeSlot, playbackPaused]);
+
+  const syncAutoScrollTarget = useCallback(() => {
+    if (activeSlot !== null && !playbackPaused) {
+      speedTargetRef.current = 0;
+      return;
+    }
+    speedTargetRef.current = hoveredRef.current && activeSlot === null ? 0 : 1;
+  }, [activeSlot, playbackPaused]);
 
   const wrapOffset = useCallback((next: number) => {
     const cycle = cycleLenRef.current;
@@ -955,19 +959,14 @@ function DesktopMarquee({
     return ((next % cycle) + cycle) % cycle;
   }, []);
 
-  const updateEdgeScrollTarget = useCallback((clientX: number) => {
-    if (activeSlot !== null || draggingRef.current) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const ratio = (clientX - rect.left) / rect.width;
-    if (ratio < MARQUEE_EDGE_RATIO) {
-      speedTargetRef.current = -MARQUEE_EDGE_SPEED;
-    } else if (ratio > 1 - MARQUEE_EDGE_RATIO) {
-      speedTargetRef.current = MARQUEE_EDGE_SPEED;
-    } else {
-      speedTargetRef.current = 0;
-    }
-  }, [activeSlot]);
+  /** Only treat wheel as horizontal when deltaX clearly dominates (don't hijack vertical page scroll). */
+  const horizontalWheelDelta = (e: WheelEvent): number => {
+    const absX = Math.abs(e.deltaX);
+    const absY = Math.abs(e.deltaY);
+    if (absX > absY) return e.deltaX;
+    if (e.shiftKey && absY > 0) return e.deltaY;
+    return 0;
+  };
 
   useEffect(() => {
     let raf = 0;
@@ -1027,8 +1026,8 @@ function DesktopMarquee({
     if (!container) return;
 
     const onWheel = (e: WheelEvent) => {
-      if (activeSlot !== null) return;
-      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (activeSlot !== null && !playbackPaused) return;
+      const delta = horizontalWheelDelta(e);
       if (delta === 0) return;
       e.preventDefault();
       speedTargetRef.current = 0;
@@ -1037,14 +1036,13 @@ function DesktopMarquee({
 
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [activeSlot, wrapOffset]);
+  }, [activeSlot, playbackPaused, wrapOffset]);
 
   if (itemCount === 0) return null;
 
   const strip = (copyKey: StripId) =>
     items.map((item, i) => {
       const slot = marqueeSlot(copyKey, i);
-      const canPlay = Boolean(youtubeVideoIdFromUrl(item.href ?? ""));
       return (
         <div key={`${copyKey}-${item.href ?? item.title}-${i}`} className="shrink-0">
           <HighlightCard
@@ -1055,13 +1053,6 @@ function DesktopMarquee({
             muted={muted}
             playbackPaused={activeSlot === slot && playbackPaused}
             dragGuardRef={dragGuardRef}
-            onPointerEnterCard={() => {
-              if (draggingRef.current || dragGuardRef.current || !canPlay) return;
-              open(copyKey, i);
-            }}
-            onPointerLeaveCard={() => {
-              if (activeSlot === slot && !slotExpandedRef.current[slot]) close();
-            }}
             onExpandedChange={(exp) => {
               slotExpandedRef.current[slot] = exp;
             }}
@@ -1087,19 +1078,18 @@ function DesktopMarquee({
 
       <div
         ref={containerRef}
-        data-lenis-prevent
         className={`relative w-full overflow-hidden py-4 select-none ${
           activeSlot ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         onMouseEnter={() => {
           hoveredRef.current = true;
-          if (activeSlot === null) speedTargetRef.current = 0;
+          syncAutoScrollTarget();
         }}
         onMouseLeave={() => {
           hoveredRef.current = false;
           draggingRef.current = false;
           setIsDragging(false);
-          if (activeSlot === null) speedTargetRef.current = 1;
+          syncAutoScrollTarget();
         }}
         onPointerDownCapture={(e) => {
           if (activeSlot !== null) return;
@@ -1115,22 +1105,18 @@ function DesktopMarquee({
         }}
         onPointerMove={(e) => {
           if (activeSlot !== null) return;
+          if (e.buttons !== 1) return;
 
-          if (e.buttons === 1) {
-            const dx = e.clientX - dragStartXRef.current;
-            if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
-              draggingRef.current = true;
-              dragGuardRef.current = true;
-              setIsDragging(true);
-              close();
-            }
-            if (draggingRef.current) {
-              offsetRef.current = wrapOffset(dragStartOffsetRef.current - dx);
-            }
-            return;
+          const dx = e.clientX - dragStartXRef.current;
+          if (!draggingRef.current && Math.abs(dx) >= MARQUEE_DRAG_THRESHOLD_PX) {
+            draggingRef.current = true;
+            dragGuardRef.current = true;
+            setIsDragging(true);
+            close();
           }
-
-          updateEdgeScrollTarget(e.clientX);
+          if (draggingRef.current) {
+            offsetRef.current = wrapOffset(dragStartOffsetRef.current - dx);
+          }
         }}
         onPointerDown={(e) => {
           if (activeSlot !== null) return;
@@ -1139,23 +1125,15 @@ function DesktopMarquee({
           dragStartXRef.current = e.clientX;
           dragStartOffsetRef.current = offsetRef.current;
         }}
-        onPointerUp={(e) => {
-          const wasDragging = draggingRef.current;
+        onPointerUp={() => {
           draggingRef.current = false;
           setIsDragging(false);
-          if (activeSlot === null) {
-            if (wasDragging) {
-              speedTargetRef.current = 0;
-            } else if (hoveredRef.current) {
-              updateEdgeScrollTarget(e.clientX);
-            } else {
-              speedTargetRef.current = 1;
-            }
-          }
+          syncAutoScrollTarget();
         }}
         onPointerCancel={() => {
           draggingRef.current = false;
           setIsDragging(false);
+          syncAutoScrollTarget();
         }}
       >
         <div ref={trackRef} className="flex gap-4 will-change-transform">

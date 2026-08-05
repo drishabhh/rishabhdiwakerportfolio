@@ -1,5 +1,6 @@
 "use client";
 
+import { HeaderRoleTicker } from "@/components/header-role-ticker";
 import { HeroBackground } from "@/components/hero-background";
 import { CinematicSection } from "@/components/cinematic-section";
 import { TextLoop } from "@/components/text-loop";
@@ -164,6 +165,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [viewportReady, setViewportReady] = useState(false);
   const scrollLockRef = useRef(false);
   const returningHomeRef = useRef(false);
   const cancelScrollRef = useRef<(() => void) | null>(null);
@@ -348,7 +350,10 @@ export default function HomeClient({ content }: HomeClientProps) {
   }, []);
 
   useEffect(() => {
-    const syncMobile = () => setIsMobileView(window.innerWidth < 768);
+    const syncMobile = () => {
+      setIsMobileView(window.innerWidth < 768);
+      setViewportReady(true);
+    };
     syncMobile();
     window.addEventListener("resize", syncMobile);
     return () => window.removeEventListener("resize", syncMobile);
@@ -603,6 +608,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}
         blurred={bgBlurActive}
         useWebGL={useHeroWebGL}
+        entranceLocked={!isMounted || !viewportReady}
       />
 
       <motion.header
@@ -612,21 +618,19 @@ export default function HomeClient({ content }: HomeClientProps) {
         transition={{ duration: sectionEnterMs, ease: cinematicEase }}
         className={`fixed left-0 right-0 top-0 z-50 ${headerSurfaceClass}`}
       >
-        <div className="mx-auto flex min-h-[52px] max-w-6xl items-center justify-between gap-2 px-4 py-2 sm:gap-3 sm:px-6 md:h-[52px] md:px-10 md:py-0">
-          <div className="flex min-w-0 flex-1 items-center">
-            <span className={`shrink-0 text-xs font-bold sm:text-sm ${headerNameClass}`}>
+        <div className="mx-auto flex min-h-[52px] max-w-6xl items-center justify-between gap-2 px-4 py-2 sm:gap-3 sm:px-6 md:min-h-[52px] md:px-10 md:py-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-0 pr-2 leading-none">
+            <span className={`truncate text-xs font-bold sm:text-sm ${headerNameClass}`}>
               {content.header.name}
             </span>
-            <span className="mx-1.5 hidden shrink-0 opacity-40 min-[420px]:inline sm:mx-2" aria-hidden>
-              ·
-            </span>
-            <span
-              className={`hidden min-w-0 truncate text-[9px] uppercase tracking-[0.12em] opacity-60 min-[420px]:inline sm:text-[10px] sm:tracking-[0.15em] ${
-                isDark ? "text-zinc-400" : "text-zinc-600"
-              }`}
-            >
-              {content.header.tagline}
-            </span>
+            <div className="min-w-0 max-w-full overflow-hidden">
+              <HeaderRoleTicker
+                tagline={content.header.tagline}
+                className={`text-[9px] font-medium uppercase tracking-[0.12em] opacity-70 sm:text-[10px] sm:tracking-[0.14em] ${
+                  isDark ? "text-zinc-400" : "text-zinc-600"
+                }`}
+              />
+            </div>
           </div>
           <div className={`flex shrink-0 items-center gap-1 text-sm sm:gap-2 md:gap-3 ${cardMutedClass}`}>
             <span

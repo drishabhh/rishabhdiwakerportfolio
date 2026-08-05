@@ -174,30 +174,32 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
           mixBlendMode: isDark ? "overlay" : "multiply",
         }}
       />
-      <div className="relative flex h-full flex-col">
-        <p
-          className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-            isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
-          }`}
-        >
-          {entry.dateRange}
-        </p>
-        <h3
-          className={`mt-4 max-w-full font-serif text-2xl font-bold leading-tight tracking-tight md:mt-5 md:text-[1.75rem] md:font-extrabold ${
-            isDark ? "text-white title-glow-opposite-light-text" : "text-black title-glow-opposite-dark-text"
-          }`}
-        >
-          {entry.company}
-        </h3>
-        <p
-          className={`mt-2 text-sm font-medium md:text-base ${
-            isDark ? "text-white/85 title-glow-opposite-light-text" : "text-zinc-700"
-          }`}
-        >
-          {entry.role}
-        </p>
-        {marketingLinksBlock}
-        <div className="flex flex-1 items-center justify-center py-6">
+      <div className="relative grid h-full min-h-0 grid-rows-[1fr_auto_auto] gap-0">
+        <div className="min-h-0">
+          <p
+            className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
+              isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
+            }`}
+          >
+            {entry.dateRange}
+          </p>
+          <h3
+            className={`mt-4 max-w-full font-serif text-2xl font-bold leading-tight tracking-tight md:mt-5 md:text-[1.75rem] md:font-extrabold ${
+              isDark ? "text-white title-glow-opposite-light-text" : "text-black title-glow-opposite-dark-text"
+            }`}
+          >
+            {entry.company}
+          </h3>
+          <p
+            className={`mt-2 text-sm font-medium md:text-base ${
+              isDark ? "text-white/85 title-glow-opposite-light-text" : "text-zinc-700"
+            }`}
+          >
+            {entry.role}
+          </p>
+          {marketingLinksBlock}
+        </div>
+        <div className="flex items-center justify-center py-5 md:py-6">
           <button
             type="button"
             data-no-card-activate="true"
@@ -216,15 +218,13 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
             Click here to watch
           </button>
         </div>
-        {!hasMarketingLinks ? (
-          <p
-            className={`max-w-[20rem] text-xs leading-relaxed md:text-sm ${
-              isDark ? "text-zinc-300" : "text-zinc-500"
-            }`}
-          >
-            {entry.tagline}
-          </p>
-        ) : null}
+        <p
+          className={`min-h-[3.25rem] max-w-[20rem] text-xs leading-relaxed md:min-h-[3.5rem] md:text-sm ${
+            isDark ? "text-zinc-300" : "text-zinc-500"
+          } ${hasMarketingLinks ? "opacity-0" : ""}`}
+        >
+          {entry.tagline}
+        </p>
       </div>
     </div>
   );
