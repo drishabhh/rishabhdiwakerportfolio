@@ -2,7 +2,7 @@
 
 import { useLenis } from "lenis/react";
 import { useMotionValue, type MotionValue } from "framer-motion";
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 function nativePageProgress() {
   const limit = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
@@ -55,14 +55,18 @@ export function useNativePageScrollProgress(enabled: boolean): MotionValue<numbe
 /**
  * Section scroll progress synced to Lenis or native scroll.
  * Mirrors Framer offset: start 0.92 → end 0.15 through the element.
+ * Skips measurement when the section is off-screen to reduce scroll jank.
  */
 export function useNativeSectionScrollProgress(
   ref: RefObject<HTMLElement | null>,
   enabled: boolean,
 ): MotionValue<number> {
   const progress = useMotionValue(0);
+  const isNearViewport = useRef(true);
 
   const measure = () => {
+    if (!isNearViewport.current) return;
+
     const el = ref.current;
     if (!el) return;
 
@@ -75,6 +79,24 @@ export function useNativeSectionScrollProgress(
     const p = travel > 0 ? Math.min(1, Math.max(0, current / travel)) : 0;
     progress.set(p);
   };
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isNearViewport.current = entry.isIntersecting;
+        if (entry.isIntersecting) measure();
+      },
+      { rootMargin: "40% 0px 40% 0px", threshold: 0 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [enabled, ref]);
 
   useLenis(
     () => {
@@ -89,19 +111,23 @@ export function useNativeSectionScrollProgress(
     if (!enabled) return;
 
     let raf = 0;
-    const tick = () => {
-      if (!document.documentElement.classList.contains("lenis")) {
-        measure();
-      }
-      raf = requestAnimationFrame(tick);
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!document.documentElement.classList.contains("lenis")) {
+          measure();
+        }
+      });
     };
 
     measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", measure);
-    raf = requestAnimationFrame(tick);
     return () => {
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
-      cancelAnimationFrame(raf);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [enabled, progress, ref]);
 

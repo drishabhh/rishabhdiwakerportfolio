@@ -41,7 +41,7 @@ export function TestLabClient() {
         <motion.div className="absolute inset-[-8%]" style={{ x: shiftX, y: shiftY }}>
           <Image
             src={HOME_BG}
-            alt=""
+            alt="Hero background portrait"
             fill
             priority
             unoptimized

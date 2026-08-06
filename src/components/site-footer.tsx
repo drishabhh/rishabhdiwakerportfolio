@@ -152,7 +152,7 @@ export function SiteFooter({
         <div className="absolute left-1/2 top-0 h-[200%] w-[min(160vw,1680px)] -translate-x-1/2 opacity-[0.03]">
           <Image
             src="/hero/import-magic-export-bw.png"
-            alt=""
+            alt="Import, magic, export workflow motto"
             fill
             unoptimized
             className="object-contain object-top [transform:translateY(8%)_scale(1.5)]"

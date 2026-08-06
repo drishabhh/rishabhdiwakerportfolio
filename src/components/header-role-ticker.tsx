@@ -1,5 +1,6 @@
 "use client";
 
+import { useHydrated } from "@/hooks/use-hydrated";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,7 +9,7 @@ const TICK_INTERVAL_MS = 1200;
 
 function parseRoleTitles(tagline: string): string[] {
   return tagline
-    .split(/\s*(?:,|&)\s*/)
+    .split(/\s*(?:,|&|·)\s*/)
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -22,6 +23,7 @@ export function HeaderRoleTicker({ tagline, className = "" }: HeaderRoleTickerPr
   const titles = useMemo(() => parseRoleTitles(tagline), [tagline]);
   const reduced = Boolean(useReducedMotion());
   const [index, setIndex] = useState(0);
+  const hydrated = useHydrated();
 
   useEffect(() => {
     if (reduced || titles.length <= 1) return;
@@ -35,10 +37,12 @@ export function HeaderRoleTicker({ tagline, className = "" }: HeaderRoleTickerPr
 
   const longest = titles.reduce((a, b) => (a.length > b.length ? a : b), titles[0] ?? "");
 
-  if (reduced || titles.length === 1) {
+  /* Server markup holds a single role: the animated branch adds an invisible
+     width sizer, which would otherwise concatenate into the server HTML. */
+  if (!hydrated || reduced || titles.length === 1) {
     return (
       <span className={`block whitespace-nowrap ${className}`} aria-label={tagline}>
-        {titles[0]}
+        {titles[index] ?? titles[0]}
       </span>
     );
   }

@@ -125,16 +125,6 @@ function shouldShowHeroOverlay(
   return scrollY < scrollHideThreshold;
 }
 
-/** Hero background blur — strict on/off (no hysteresis flicker). */
-const HERO_BLUR_ON_Y_MOBILE = 28;
-const HERO_BLUR_ON_Y_DESKTOP = 36;
-
-function shouldBlurHeroBackground(scrollY: number, isMobile: boolean, returningHome: boolean): boolean {
-  if (returningHome) return false;
-  const threshold = isMobile ? HERO_BLUR_ON_Y_MOBILE : HERO_BLUR_ON_Y_DESKTOP;
-  return scrollY > threshold;
-}
-
 const navItems = [
   { id: "home", label: "Home", icon: House, targetId: "home" },
   { id: "summary", label: "Summary", icon: FileText, targetId: "summary-bio" },
@@ -161,11 +151,9 @@ export default function HomeClient({ content }: HomeClientProps) {
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
-  const [bgBlurActive, setBgBlurActive] = useState(false);
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [viewportReady, setViewportReady] = useState(false);
   const scrollLockRef = useRef(false);
   const returningHomeRef = useRef(false);
   const cancelScrollRef = useRef<(() => void) | null>(null);
@@ -350,10 +338,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   }, []);
 
   useEffect(() => {
-    const syncMobile = () => {
-      setIsMobileView(window.innerWidth < 768);
-      setViewportReady(true);
-    };
+    const syncMobile = () => setIsMobileView(window.innerWidth < 768);
     syncMobile();
     window.addEventListener("resize", syncMobile);
     return () => window.removeEventListener("resize", syncMobile);
@@ -432,7 +417,6 @@ export default function HomeClient({ content }: HomeClientProps) {
       if (!scrollLockRef.current) {
         scrollingUpRef.current = scrollingUp;
         lastScrollYRef.current = scrollY;
-        setBgBlurActive(shouldBlurHeroBackground(scrollY, isMobile, returningHomeRef.current));
       }
 
       const nextVisible = returningHomeRef.current
@@ -527,7 +511,6 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       if (id === "home") {
         returningHomeRef.current = true;
-        setBgBlurActive(false);
 
         if (navReducedMotion || !lenis) {
           if (!navReducedMotion && window.innerWidth < 768) {
@@ -537,7 +520,6 @@ export default function HomeClient({ content }: HomeClientProps) {
                 scrollLockRef.current = false;
                 returningHomeRef.current = false;
                 cancelScrollRef.current = null;
-                setBgBlurActive(false);
                 setHeroOverlayVisible(true);
                 setContentElevated(false);
               },
@@ -548,7 +530,6 @@ export default function HomeClient({ content }: HomeClientProps) {
           window.scrollTo({ top: 0, behavior: "auto" });
           scrollLockRef.current = false;
           returningHomeRef.current = false;
-          setBgBlurActive(false);
           return;
         }
 
@@ -560,14 +541,12 @@ export default function HomeClient({ content }: HomeClientProps) {
             returningHomeRef.current = false;
             setHeroOverlayVisible(true);
             setContentElevated(false);
-            setBgBlurActive(false);
           },
         });
         return;
       }
 
       returningHomeRef.current = false;
-      setBgBlurActive(true);
 
       const scrollOffset =
         id === "contact" && window.innerWidth < 768 ? 76 : sectionScrollOffset;
@@ -576,7 +555,6 @@ export default function HomeClient({ content }: HomeClientProps) {
         const targetY = section.getBoundingClientRect().top + window.scrollY - scrollOffset;
         window.scrollTo({ top: targetY, behavior: "auto" });
         scrollLockRef.current = false;
-        setBgBlurActive(shouldBlurHeroBackground(targetY, window.innerWidth < 768, false));
         return;
       }
 
@@ -588,7 +566,6 @@ export default function HomeClient({ content }: HomeClientProps) {
           scrollLockRef.current = false;
           setHeroOverlayVisible(false);
           setContentElevated(true);
-          setBgBlurActive(true);
         },
       });
     },
@@ -606,9 +583,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         mobileSrc={HOME_BG_MOBILE}
         mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
         desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}
-        blurred={bgBlurActive}
         useWebGL={useHeroWebGL}
-        entranceLocked={!isMounted || !viewportReady}
       />
 
       <motion.header
@@ -691,11 +666,11 @@ export default function HomeClient({ content }: HomeClientProps) {
           ) : (
             <Image
               src={CV_ICON_SRC}
-              alt=""
+              alt="Download CV"
               width={32}
               height={32}
               unoptimized
-              className="h-7 w-7 object-contain object-center md:h-8 md:w-8"
+              className="h-auto w-7 object-contain object-center md:w-8"
             />
           )}
         </button>
@@ -755,7 +730,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           >
             <Image
               src={HOME_HERO_LOGO}
-              alt=""
+              alt={`${content.header.name} logo`}
               width={800}
               height={320}
               unoptimized
@@ -839,14 +814,18 @@ export default function HomeClient({ content }: HomeClientProps) {
             </div>
           </div>
         </CinematicSection>
+      </div>
 
+      <CinematicSection as="div" divider className="relative z-20 scroll-mt-28 w-full">
         <HighlightedEditsGallery
           items={highlightedEdits}
           isDark={isDark}
           sectionTitleClass={sectionHeadingClass}
         />
+      </CinematicSection>
 
-        <CinematicSection id="skills" depth="medium" className="scroll-mt-28 flex flex-col gap-6 md:gap-8">
+      <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+        <CinematicSection id="skills" depth="medium" divider className="scroll-mt-28 flex flex-col gap-6 md:gap-8">
           <SkillsTagCloud
             isDark={isDark}
             headingClass={headingClass}
@@ -858,30 +837,25 @@ export default function HomeClient({ content }: HomeClientProps) {
           />
         </CinematicSection>
 
-        <ProductionVault
-          isDark={isDark}
-          mutedClass={cardMutedClass}
-          subheadingClass={subheadingClass}
-          sectionTitleClass={sectionHeadingClass}
-          title={content.vault.title}
-          subtitle={content.vault.subtitle}
-          playlists={content.vault.playlists}
-        />
+        <CinematicSection as="div" divider reveal={false} className="relative z-20 scroll-mt-28">
+          <ProductionVault
+            isDark={isDark}
+            mutedClass={cardMutedClass}
+            subheadingClass={subheadingClass}
+            sectionTitleClass={sectionHeadingClass}
+            title={content.vault.title}
+            subtitle={content.vault.subtitle}
+            playlists={content.vault.playlists}
+          />
+        </CinematicSection>
 
-        <motion.section
-          id="experience"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={fadeUp}
-          transition={{ duration: sectionEnterMs, ease: cinematicEase }}
-          className="scroll-mt-28 space-y-6"
-        >
+        <CinematicSection id="experience" divider reveal={false} className="scroll-mt-28 space-y-6">
           <h2 className={sectionHeadingClass}>{content.experience.title}</h2>
           <ExperienceFlipCards isDark={isDark} roles={content.experience.roles} />
-        </motion.section>
+        </CinematicSection>
 
-        <ServicesGlassBento
+        <div className="relative z-20 scroll-mt-28">
+          <ServicesGlassBento
           isDark={isDark}
           headingClass={cardTitleClass}
           sectionTitleClass={sectionHeadingClass}
@@ -890,6 +864,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           title={content.services.title}
           services={content.services.items}
         />
+        </div>
 
       </div>
 

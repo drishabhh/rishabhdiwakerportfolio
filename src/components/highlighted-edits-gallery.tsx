@@ -128,6 +128,8 @@ type CardProps = {
   dragGuardRef?: React.MutableRefObject<boolean>;
   /** Mobile rail: cinema fullscreen + always-visible control buttons. */
   touchUi?: boolean;
+  /** Desktop marquee: wider portrait cards */
+  desktopMarquee?: boolean;
   onPointerEnterCard?: () => void;
   onPointerLeaveCard?: () => void;
   onExpandedChange?: (expanded: boolean) => void;
@@ -147,6 +149,7 @@ function HighlightCard({
   playbackPaused,
   dragGuardRef,
   touchUi = false,
+  desktopMarquee = false,
   onPointerEnterCard,
   onPointerLeaveCard,
   onExpandedChange,
@@ -502,6 +505,9 @@ function HighlightCard({
   const railShellClass = `group relative aspect-[9/16] w-[200px] shrink-0 snap-center overflow-hidden rounded-2xl sm:w-[220px] ${
     isDark ? "bg-white/5" : "bg-black/5"
   }`;
+  const desktopMarqueeShellClass = `group relative aspect-[9/16] w-[min(18vw,300px)] shrink-0 overflow-hidden rounded-2xl ${
+    isDark ? "bg-white/5" : "bg-black/5"
+  }`;
   const cinemaShellClass =
     "!fixed !inset-0 !z-[200] !m-0 flex !h-dvh !w-dvw !max-w-none !shrink-0 items-center justify-center !rounded-none bg-black";
 
@@ -510,7 +516,7 @@ function HighlightCard({
       ref={cardRef}
       onPointerEnter={onPointerEnterCard}
       onPointerLeave={onPointerLeaveCard}
-      className={`${cinemaMode ? cinemaShellClass : railShellClass} fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
+      className={`${cinemaMode ? cinemaShellClass : desktopMarquee ? desktopMarqueeShellClass : railShellClass} fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
     >
       <div
         className={`relative h-full w-full overflow-hidden ${
@@ -709,13 +715,11 @@ function GalleryHeader({
   sectionTitleClass,
   onPrev,
   onNext,
-  constrained = false,
 }: {
   isDark: boolean;
   sectionTitleClass?: string;
   onPrev: () => void;
   onNext: () => void;
-  constrained?: boolean;
 }) {
   const navBtnClass = `flex h-10 w-10 touch-manipulation items-center justify-center rounded-full border transition-colors ${
     isDark
@@ -758,18 +762,15 @@ function GalleryHeader({
     </>
   );
 
-  if (constrained) {
-    return (
-      <div className="relative z-30 mx-auto flex max-w-6xl items-end justify-between gap-4 px-6 md:px-10">
-        {inner}
-      </div>
-    );
-  }
-
-  return <div className="relative z-30 flex items-end justify-between">{inner}</div>;
+  return (
+    <div className="relative z-30 mx-auto flex w-full max-w-6xl items-end justify-between gap-4 px-6 md:px-10">
+      {inner}
+    </div>
+  );
 }
 
-const CARD_STEP = 220 + 16;
+const CARD_GAP = 16;
+const DEFAULT_CARD_STEP = 220 + CARD_GAP;
 const MARQUEE_SPEED_PX_PER_SEC = 72;
 const MARQUEE_DRAG_THRESHOLD_PX = 6;
 
@@ -823,7 +824,7 @@ function HighlightRail({
       const rail = railRef.current;
       if (!rail) return;
       requestAnimationFrame(() => {
-        rail.scrollBy({ left: dir * CARD_STEP, behavior: "smooth" });
+        rail.scrollBy({ left: dir * DEFAULT_CARD_STEP, behavior: "smooth" });
       });
     },
     [close],
@@ -905,7 +906,8 @@ function DesktopMarquee({
   const trackRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);
-  const cycleLenRef = useRef(Math.max(items.length * CARD_STEP, 1));
+  const cardStepRef = useRef(DEFAULT_CARD_STEP);
+  const cycleLenRef = useRef(Math.max(items.length * DEFAULT_CARD_STEP, 1));
   const speedTargetRef = useRef(1);
   const speedRef = useRef(1);
   const hoveredRef = useRef(false);
@@ -923,7 +925,31 @@ function DesktopMarquee({
   const itemCount = items.length;
 
   useEffect(() => {
-    cycleLenRef.current = Math.max(itemCount * CARD_STEP, 1);
+    const track = trackRef.current;
+    if (!track) return;
+
+    const measure = () => {
+      const first = track.querySelector<HTMLElement>("[data-marquee-card]");
+      if (!first) return;
+      const width = first.getBoundingClientRect().width;
+      if (width > 0) {
+        cardStepRef.current = width + CARD_GAP;
+        cycleLenRef.current = Math.max(itemCount * cardStepRef.current, 1);
+      }
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(track);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [itemCount]);
+
+  useEffect(() => {
+    cycleLenRef.current = Math.max(itemCount * cardStepRef.current, 1);
     if (activeSlot !== null) {
       const parsed = parseMarqueeSlot(activeSlot);
       if (!parsed || parsed.index >= itemCount) {
@@ -998,7 +1024,7 @@ function DesktopMarquee({
   const nudge = useCallback((dir: 1 | -1) => {
     setActiveSlot(null);
     setPlaybackPaused(false);
-    offsetRef.current = wrapOffset(offsetRef.current + dir * CARD_STEP);
+    offsetRef.current = wrapOffset(offsetRef.current + dir * cardStepRef.current);
   }, [wrapOffset]);
 
   const open = useCallback(
@@ -1044,7 +1070,7 @@ function DesktopMarquee({
     items.map((item, i) => {
       const slot = marqueeSlot(copyKey, i);
       return (
-        <div key={`${copyKey}-${item.href ?? item.title}-${i}`} className="shrink-0">
+        <div key={`${copyKey}-${item.href ?? item.title}-${i}`} data-marquee-card className="shrink-0">
           <HighlightCard
             item={item}
             index={i}
@@ -1052,6 +1078,7 @@ function DesktopMarquee({
             isDark={isDark}
             muted={muted}
             playbackPaused={activeSlot === slot && playbackPaused}
+            desktopMarquee
             dragGuardRef={dragGuardRef}
             onExpandedChange={(exp) => {
               slotExpandedRef.current[slot] = exp;
@@ -1067,13 +1094,12 @@ function DesktopMarquee({
     });
 
   return (
-    <div className="space-y-5">
+    <div className="w-full space-y-5">
       <GalleryHeader
         isDark={isDark}
         sectionTitleClass={sectionTitleClass}
         onPrev={() => nudge(-1)}
         onNext={() => nudge(1)}
-        constrained
       />
 
       <div
@@ -1172,7 +1198,7 @@ export function HighlightedEditsGallery({
       id="highlighted-edits"
       className={
         isDesktop
-          ? "relative left-1/2 z-10 w-screen max-w-[100vw] -translate-x-1/2 scroll-mt-28 overflow-x-clip"
+          ? "relative z-10 w-full scroll-mt-28"
           : "scroll-mt-28"
       }
       aria-labelledby="highlighted-edits-heading"

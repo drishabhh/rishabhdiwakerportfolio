@@ -1,11 +1,7 @@
 "use client";
 
-import { LayoutGroup, motion } from "framer-motion";
 import Link from "next/link";
 import { Play } from "lucide-react";
-
-const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const layoutSpring = { type: "spring" as const, stiffness: 170, damping: 28, mass: 0.9 };
 
 import type { VaultPlaylist } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
@@ -17,8 +13,8 @@ type ArchiveCardProps = {
 
 function ArchiveCard({ playlist, isDark }: ArchiveCardProps) {
   const shellClass = isDark
-    ? "border border-white/10 bg-[#1A1A1A]/76 backdrop-blur-2xl ring-1 ring-white/[0.06]"
-    : "border border-zinc-300/70 bg-gradient-to-br from-white via-zinc-50 to-zinc-100/90 backdrop-blur-2xl ring-1 ring-zinc-200/80 shadow-[0_10px_40px_-18px_rgba(0,0,0,0.35)]";
+    ? "border border-white/10 bg-[#1A1A1A]/90 ring-1 ring-white/[0.06]"
+    : "border border-zinc-300/70 bg-gradient-to-br from-white via-zinc-50 to-zinc-100/90 ring-1 ring-zinc-200/80 shadow-[0_10px_40px_-18px_rgba(0,0,0,0.35)]";
   const titleClass = isDark
     ? "text-white"
     : "text-zinc-950";
@@ -30,11 +26,8 @@ function ArchiveCard({ playlist, isDark }: ArchiveCardProps) {
     : "border-zinc-300 bg-white text-zinc-900 shadow-sm group-hover/archive:border-[#ff0f0f] group-hover/archive:bg-[#ff0f0f] group-hover/archive:text-white group-hover/archive:shadow-[0_8px_28px_rgba(220,38,38,0.35)]";
 
   return (
-    <motion.article
-      layout
-      transition={{ layout: layoutSpring }}
-      whileHover={{ y: -4 }}
-      className={`group/archive relative h-full overflow-hidden rounded-2xl ${shellClass}`}
+    <article
+      className={`group/archive relative h-full overflow-hidden rounded-2xl transition-transform duration-200 ease-out hover:-translate-y-1 ${shellClass}`}
     >
       <Link
         href={playlist.href}
@@ -63,7 +56,7 @@ function ArchiveCard({ playlist, isDark }: ArchiveCardProps) {
           </span>
         </span>
       </Link>
-    </motion.article>
+    </article>
   );
 }
 
@@ -87,19 +80,8 @@ export function ProductionVault({
   playlists,
 }: ProductionVaultProps) {
   return (
-    <motion.section
+    <section
       id="production-vault"
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.08 }}
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        visible: {
-          opacity: 1,
-          y: 0,
-          transition: { duration: 1.1, ease: cinematicEase },
-        },
-      }}
       className="scroll-mt-28 space-y-8 pt-4 md:space-y-10 md:pt-6"
       aria-labelledby="production-vault-heading"
     >
@@ -112,13 +94,11 @@ export function ProductionVault({
         </p>
       </div>
 
-      <LayoutGroup id="archive-grid-layout">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
-          {playlists.map((p) => (
-            <ArchiveCard key={p.id} playlist={p} isDark={isDark} />
-          ))}
-        </div>
-      </LayoutGroup>
-    </motion.section>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+        {playlists.map((p) => (
+          <ArchiveCard key={p.id} playlist={p} isDark={isDark} />
+        ))}
+      </div>
+    </section>
   );
 }

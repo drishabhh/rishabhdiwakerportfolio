@@ -38,7 +38,7 @@ function TabPreview({ iconSrc, title }: { iconSrc: string; title: string }) {
       <div className="flex items-end gap-1 overflow-x-auto px-2 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex min-w-0 max-w-[min(100%,220px)] shrink-0 items-center gap-2 rounded-t-lg border border-b-0 border-zinc-600 bg-zinc-700 px-3 py-2 shadow-sm">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={iconSrc} alt="" className="h-4 w-4 shrink-0 object-contain" width={16} height={16} />
+          <img src={iconSrc} alt="Favicon preview" className="h-4 w-4 shrink-0 object-contain" width={16} height={16} />
           <span className="truncate text-xs text-zinc-100">{title || "Your site"}</span>
           <span className="ml-1 shrink-0 text-[10px] text-zinc-400">×</span>
         </div>
@@ -194,12 +194,12 @@ export function FaviconEditor({ pageTitle, currentFavicon, onSave, uploading, er
           <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
             <span className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl || undefined} alt="" className="h-4 w-4 object-contain" width={16} height={16} />
+              <img src={previewUrl || undefined} alt="Favicon at 16 by 16 pixels" className="h-4 w-4 object-contain" width={16} height={16} />
               16×16
             </span>
             <span className="inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewUrl || undefined} alt="" className="h-8 w-8 object-contain" width={32} height={32} />
+              <img src={previewUrl || undefined} alt="Favicon at 32 by 32 pixels" className="h-8 w-8 object-contain" width={32} height={32} />
               32×32
             </span>
           </div>

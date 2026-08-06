@@ -1,5 +1,6 @@
 "use client";
 
+import { useHydrated } from "@/hooks/use-hydrated";
 import { motion, useReducedMotion } from "framer-motion";
 import { Children, useEffect, useState, type ReactNode } from "react";
 
@@ -74,6 +75,7 @@ export function TextLoop({
 }: TextLoopProps) {
   const items = Children.toArray(children).filter(Boolean);
   const [stepIndex, setStepIndex] = useState(0);
+  const hydrated = useHydrated();
   const prefersReducedMotion = useReducedMotion();
   const useRotatingFonts = rotateFonts ?? true;
 
@@ -149,12 +151,22 @@ export function TextLoop({
   );
 
   if (stableSlot) {
+    /* The invisible sizer reserves the widest word, so it must stay out of the
+       server HTML — otherwise the current word is emitted twice in a row. */
     return (
       <span className={`relative inline-block min-h-[1.45em] shrink-0 align-middle leading-none ${className}`}>
-        <span aria-hidden className="invisible whitespace-nowrap leading-none">
-          {longestChildText(items)}
+        <span
+          aria-hidden={hydrated || undefined}
+          className={
+            hydrated
+              ? "invisible block whitespace-nowrap leading-none"
+              : "block whitespace-nowrap leading-none"
+          }
+          style={!hydrated && fontFamily ? { fontFamily } : undefined}
+        >
+          {hydrated ? longestChildText(items) : current}
         </span>
-        {wordNode}
+        {hydrated ? wordNode : null}
       </span>
     );
   }

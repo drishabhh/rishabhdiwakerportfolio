@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useReducedMotion } from "framer-motion";
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
 
@@ -8,6 +9,9 @@ const HeroWebGLScene = dynamic(
   () => import("@/components/hero-webgl-scene").then((mod) => mod.HeroWebGLScene),
   { ssr: false, loading: () => null },
 );
+
+const CROSSFADE_MS = 900;
+const POINTER_RAMP_MS = 500;
 
 class WebGLErrorBoundary extends Component<
   { children: ReactNode; onFail: () => void },
@@ -34,11 +38,8 @@ export type HeroBackgroundProps = {
   mobileSrc: string;
   mobileObjectPosition: string;
   desktopObjectPosition?: string;
-  blurred: boolean;
   hidden?: boolean;
   useWebGL: boolean;
-  /** Hold hero at opacity 0 until client mount (avoids CSS flash before WebGL path is chosen). */
-  entranceLocked?: boolean;
 };
 
 export function HeroBackground({
@@ -46,63 +47,79 @@ export function HeroBackground({
   mobileSrc,
   mobileObjectPosition,
   desktopObjectPosition = "center",
-  blurred,
   hidden = false,
   useWebGL,
-  entranceLocked = false,
 }: HeroBackgroundProps) {
+  const reduced = useReducedMotion();
   const [webglFailed, setWebglFailed] = useState(false);
   const [webglReady, setWebglReady] = useState(false);
-  const [mobileLoaded, setMobileLoaded] = useState(false);
-  const [desktopLoaded, setDesktopLoaded] = useState(false);
-  const [isMobile, setIsMobile] = useState(true);
-
+  const [webglRevealed, setWebglRevealed] = useState(false);
+  const [crossfadeDone, setCrossfadeDone] = useState(false);
   const activeWebGL = useWebGL && !webglFailed;
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsMobile(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    if (!activeWebGL) setWebglReady(false);
+    if (!activeWebGL) {
+      setWebglReady(false);
+      setWebglRevealed(false);
+      setCrossfadeDone(false);
+    }
   }, [activeWebGL]);
 
-  const cssImagesReady = activeWebGL ? mobileLoaded : mobileLoaded && desktopLoaded;
-  const cssVisibleOnViewport = !activeWebGL || webglFailed || isMobile;
-  const revealCss =
-    !entranceLocked && !hidden && cssVisibleOnViewport && cssImagesReady;
-  const revealWebGL = !entranceLocked && !hidden && activeWebGL && webglReady;
+  const handleWebglReady = () => {
+    setWebglReady(true);
+    if (reduced) {
+      setWebglRevealed(true);
+      setCrossfadeDone(true);
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setWebglRevealed(true));
+    });
+  };
+
+  useEffect(() => {
+    if (!webglRevealed || crossfadeDone || reduced) return;
+    const timer = window.setTimeout(() => setCrossfadeDone(true), CROSSFADE_MS + 80);
+    return () => window.clearTimeout(timer);
+  }, [webglRevealed, crossfadeDone, reduced]);
+
+  const desktopCssOpacity = activeWebGL && webglRevealed ? 0 : 1;
 
   return (
     <>
-      {activeWebGL ? (
-        <WebGLErrorBoundary onFail={() => setWebglFailed(true)}>
-          <HeroWebGLScene
-            imageSrc={desktopSrc}
-            objectPosition={desktopObjectPosition}
-            blurred={blurred}
-            hidden={hidden}
-            reveal={revealWebGL}
-            onReady={() => setWebglReady(true)}
-          />
-        </WebGLErrorBoundary>
-      ) : null}
       <ScrollParallaxHeroBg
         desktopSrc={desktopSrc}
         mobileSrc={mobileSrc}
         mobileObjectPosition={mobileObjectPosition}
         desktopObjectPosition={desktopObjectPosition}
-        blurred={blurred}
         hidden={hidden}
-        reveal={revealCss}
-        hideDesktopImage={activeWebGL}
-        onMobileLoaded={() => setMobileLoaded(true)}
-        onDesktopLoaded={() => setDesktopLoaded(true)}
+        suppressOnDesktop={activeWebGL && crossfadeDone}
+        desktopLayerOpacity={desktopCssOpacity}
+        desktopFadeMs={reduced ? 0 : CROSSFADE_MS}
+        onDesktopFadeComplete={() => setCrossfadeDone(true)}
       />
+      {activeWebGL ? (
+        <WebGLErrorBoundary
+          onFail={() => {
+            setWebglFailed(true);
+            setWebglReady(false);
+            setWebglRevealed(false);
+            setCrossfadeDone(false);
+          }}
+        >
+          <HeroWebGLScene
+            imageSrc={desktopSrc}
+            objectPosition={desktopObjectPosition}
+            hidden={hidden}
+            ready={webglReady}
+            revealed={webglRevealed}
+            interactive={crossfadeDone}
+            crossfadeMs={reduced ? 0 : CROSSFADE_MS}
+            pointerRampMs={reduced ? 0 : POINTER_RAMP_MS}
+            onReady={handleWebglReady}
+          />
+        </WebGLErrorBoundary>
+      ) : null}
     </>
   );
 }

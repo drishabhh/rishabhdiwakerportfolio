@@ -1,26 +1,22 @@
 "use client";
 
 import { useNativePageScrollProgress } from "@/hooks/use-native-scroll-progress";
-import { motion, useMotionTemplate, useReducedMotion, useTransform } from "framer-motion";
+import { motion, useReducedMotion, useTransform } from "framer-motion";
 import Image from "next/image";
-
-const HERO_BG_ENTRANCE_MS = 0.3;
-const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 type ScrollParallaxHeroBgProps = {
   desktopSrc: string;
   mobileSrc: string;
   mobileObjectPosition: string;
   desktopObjectPosition?: string;
-  blurred: boolean;
   /** Fade out fixed hero once footer enters view (mobile contact seam). */
   hidden?: boolean;
-  /** Parent-controlled entrance (single coordinated reveal). */
-  reveal?: boolean;
-  /** Hide desktop image when WebGL hero is active */
-  hideDesktopImage?: boolean;
-  onMobileLoaded?: () => void;
-  onDesktopLoaded?: () => void;
+  /** Hide entire CSS layer on desktop (after crossfade completes). */
+  suppressOnDesktop?: boolean;
+  /** Desktop CSS hero opacity (crossfade out when WebGL reveals). */
+  desktopLayerOpacity?: number;
+  desktopFadeMs?: number;
+  onDesktopFadeComplete?: () => void;
 };
 
 export function ScrollParallaxHeroBg({
@@ -28,40 +24,26 @@ export function ScrollParallaxHeroBg({
   mobileSrc,
   mobileObjectPosition,
   desktopObjectPosition = "center",
-  blurred,
   hidden = false,
-  reveal = false,
-  hideDesktopImage = false,
-  onMobileLoaded,
-  onDesktopLoaded,
+  suppressOnDesktop = false,
+  desktopLayerOpacity = 1,
+  desktopFadeMs = 600,
+  onDesktopFadeComplete,
 }: ScrollParallaxHeroBgProps) {
   const reduced = useReducedMotion();
   const scrollYProgress = useNativePageScrollProgress(!reduced);
 
   const scale = useTransform(scrollYProgress, [0, 0.45, 1], reduced ? [1, 1, 1] : [1, 1.06, 1.1]);
   const y = useTransform(scrollYProgress, [0, 0.45, 1], reduced ? [0, 0, 0] : [0, -28, -42]);
-  const brightness = useTransform(scrollYProgress, [0, 0.35, 0.7], [1.16, 1.1, 1.02]);
-  const contrast = useTransform(scrollYProgress, [0, 0.35, 0.7], [1.05, 1.03, 1]);
-  const saturate = useTransform(scrollYProgress, [0, 0.35, 0.7], [1.06, 1.04, 1]);
   const vignetteOpacity = useTransform(scrollYProgress, [0, 0.2, 0.55], [0, 0.12, 0.42]);
   const vignetteY = useTransform(scrollYProgress, [0, 0.5], [0, 20]);
-  const imageFilter = useMotionTemplate`brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
 
   return (
-    <motion.div
+    <div
       aria-hidden
-      initial={false}
-      animate={{ opacity: hidden ? 0 : reveal ? 1 : 0 }}
-      transition={{ duration: reduced ? 0.12 : HERO_BG_ENTRANCE_MS, ease: cinematicEase }}
-      className={`pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-[filter] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[filter,opacity]${hideDesktopImage ? " md:hidden" : ""} ${
-        blurred ? "duration-400" : "duration-150"
-      }`}
+      className={`pointer-events-none fixed inset-0 z-0 min-h-[100dvh] w-screen overflow-hidden transition-opacity ease-[cubic-bezier(0.22,1,0.36,1)] will-change-opacity${suppressOnDesktop ? " md:hidden" : ""}`}
       style={{
-        filter: blurred
-          ? `blur(18px)${reduced ? " brightness(1.16) contrast(1.05) saturate(1.06)" : ""}`
-          : reduced
-            ? "brightness(1.16) contrast(1.05) saturate(1.06)"
-            : undefined,
+        opacity: hidden ? 0 : 1,
       }}
     >
       <motion.div
@@ -71,49 +53,61 @@ export function ScrollParallaxHeroBg({
           y,
         }}
       >
-        <motion.div className="absolute inset-0" style={{ filter: reduced ? undefined : imageFilter }}>
+        <div className="absolute inset-0">
           <Image
             src={mobileSrc}
-            alt=""
+            alt="Hero background portrait"
             fill
             priority
             unoptimized
-            onLoad={() => onMobileLoaded?.()}
             className="object-cover md:hidden"
             style={{ objectPosition: mobileObjectPosition }}
             sizes="100vw"
           />
-          <Image
-            src={desktopSrc}
-            alt=""
-            fill
-            priority
-            unoptimized
-            onLoad={() => onDesktopLoaded?.()}
-            className={hideDesktopImage ? "hidden" : "hidden object-cover object-center md:block"}
-            style={{ objectPosition: desktopObjectPosition }}
-            sizes="100vw"
+        </div>
+        <div
+          className="absolute inset-0 hidden transition-opacity ease-[cubic-bezier(0.22,1,0.36,1)] md:block"
+          style={{
+            opacity: desktopLayerOpacity,
+            transitionDuration: `${desktopFadeMs}ms`,
+          }}
+          onTransitionEnd={(e) => {
+            if (e.propertyName === "opacity" && desktopLayerOpacity === 0) {
+              onDesktopFadeComplete?.();
+            }
+          }}
+        >
+          <div className="absolute inset-0">
+            <Image
+              src={desktopSrc}
+              alt="Hero background portrait"
+              fill
+              priority
+              unoptimized
+              className="object-cover object-center"
+              style={{ objectPosition: desktopObjectPosition }}
+              sizes="100vw"
+            />
+          </div>
+          <motion.div
+            aria-hidden
+            className="absolute inset-0 bg-[radial-gradient(ellipse_80%_65%_at_72%_38%,transparent_0%,rgba(0,0,0,0.1)_55%,rgba(0,0,0,0.32)_100%)]"
+            style={{
+              opacity: vignetteOpacity,
+              y: vignetteY,
+            }}
           />
-        </motion.div>
+        </div>
       </motion.div>
-
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 mix-blend-soft-light opacity-80"
-        style={{
-          background:
-            "radial-gradient(ellipse 58% 52% at 72% 38%, rgba(255,255,255,0.32) 0%, rgba(255,248,240,0.1) 45%, transparent 72%)",
-        }}
-      />
 
       <motion.div
         aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(ellipse_80%_65%_at_72%_38%,transparent_0%,rgba(0,0,0,0.1)_55%,rgba(0,0,0,0.32)_100%)]"
+        className="absolute inset-0 bg-[radial-gradient(ellipse_80%_65%_at_72%_38%,transparent_0%,rgba(0,0,0,0.1)_55%,rgba(0,0,0,0.32)_100%)] md:hidden"
         style={{
           opacity: vignetteOpacity,
           y: vignetteY,
         }}
       />
-    </motion.div>
+    </div>
   );
 }
