@@ -29,13 +29,6 @@
   "highlights": {
     "items": [
       {
-        "title": "UGC",
-        "views": "0",
-        "caption": "",
-        "href": "",
-        "badge": ""
-      },
-      {
         "title": "Promotional",
         "views": "",
         "caption": "",
@@ -89,7 +82,15 @@
     ]
   },
   "trash": {
-    "highlights": []
+    "highlights": [
+      {
+        "title": "UGC",
+        "views": "0",
+        "caption": "",
+        "href": "",
+        "badge": ""
+      }
+    ]
   },
   "skills": {
     "title": "Skills",
