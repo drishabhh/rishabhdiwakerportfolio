@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
+import { vimeoEmbedSrc, vimeoFromUrl, vimeoThumbnailFromUrl } from "@/lib/vimeo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 type PlayerCommand = "mute" | "unMute" | "pauseVideo" | "playVideo" | "seekTo";
 
 const YT_ORIGIN = "https://www.youtube.com";
+const VIMEO_ORIGIN = "https://player.vimeo.com";
 
 /** iOS / touch browsers rarely support element fullscreen — use cinema overlay instead. */
 function prefersCinemaFullscreen(): boolean {
@@ -87,9 +89,28 @@ function listenToPlayer(iframe: HTMLIFrameElement | null) {
   iframe?.contentWindow?.postMessage(JSON.stringify({ event: "listening" }), YT_ORIGIN);
 }
 
+function postToVimeo(iframe: HTMLIFrameElement | null, method: string, value?: unknown) {
+  const payload = value === undefined ? { method } : { method, value };
+  iframe?.contentWindow?.postMessage(JSON.stringify(payload), VIMEO_ORIGIN);
+}
+
+function listenToVimeo(iframe: HTMLIFrameElement | null) {
+  postToVimeo(iframe, "addEventListener", "play");
+  postToVimeo(iframe, "addEventListener", "pause");
+  postToVimeo(iframe, "addEventListener", "ended");
+  postToVimeo(iframe, "addEventListener", "timeupdate");
+}
+
 /** Kick playback after the embed is ready — onLoad alone is often too early on mobile. */
-function kickPlayback(iframe: HTMLIFrameElement | null, muted: boolean) {
+function kickPlayback(iframe: HTMLIFrameElement | null, muted: boolean, provider: "youtube" | "vimeo") {
   if (!iframe) return;
+  if (provider === "vimeo") {
+    listenToVimeo(iframe);
+    postToVimeo(iframe, "play");
+    postToVimeo(iframe, "setMuted", muted);
+    postToVimeo(iframe, "setVolume", muted ? 0 : 1);
+    return;
+  }
   listenToPlayer(iframe);
   postToPlayer(iframe, "playVideo");
   postToPlayer(iframe, muted ? "mute" : "unMute");
@@ -116,8 +137,9 @@ type HighlightedEditsGalleryProps = {
 function posterFor(item: HighlightEditItem): string {
   if (item.posterUrl) return item.posterUrl;
   if (item.thumbnail) return item.thumbnail;
-  const id = youtubeVideoIdFromUrl(item.href ?? "");
-  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+  const yt = youtubeVideoIdFromUrl(item.href ?? "");
+  if (yt) return `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`;
+  return vimeoThumbnailFromUrl(item.href ?? "");
 }
 
 type CardProps = {
@@ -165,8 +187,10 @@ function HighlightCard({
   const poster = posterFor(item);
   const fileUrl = item.fileUrl?.trim() ?? "";
   const useHosted = Boolean(fileUrl);
-  const videoId = useHosted ? "" : youtubeVideoIdFromUrl(item.href ?? "");
-  const playable = useHosted || Boolean(videoId);
+  const youtubeId = useHosted ? "" : youtubeVideoIdFromUrl(item.href ?? "");
+  const vimeoRef = useHosted ? null : vimeoFromUrl(item.href ?? "");
+  const provider: "youtube" | "vimeo" | null = youtubeId ? "youtube" : vimeoRef ? "vimeo" : null;
+  const playable = useHosted || Boolean(provider);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -177,7 +201,7 @@ function HighlightCard({
   const playbackPausedRef = useRef(playbackPaused);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const iframeMounted = isActive && Boolean(videoId);
+  const iframeMounted = isActive && Boolean(provider);
   const videoMounted = isActive && useHosted;
   const playing = isActive && !playbackPaused;
   const [progress, setProgress] = useState(0);
@@ -188,9 +212,11 @@ function HighlightCard({
   // Always start muted in the embed URL — browsers allow that for autoplay.
   // Sound is restored immediately via postMessage when the parent has muted=false.
   const sessionEmbedSrc = useMemo(() => {
-    if (!iframeMounted || !videoId) return null;
-    return embedSrc(videoId, true);
-  }, [iframeMounted, videoId]);
+    if (!iframeMounted) return null;
+    if (youtubeId) return embedSrc(youtubeId, true);
+    if (vimeoRef) return vimeoEmbedSrc(vimeoRef, true);
+    return null;
+  }, [iframeMounted, youtubeId, vimeoRef]);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -209,12 +235,12 @@ function HighlightCard({
     (iframe: HTMLIFrameElement | null, delayMs = 0) => {
       const id = window.setTimeout(() => {
         if (!playbackPausedRef.current) {
-          kickPlayback(iframe, mutedRef.current);
+          kickPlayback(iframe, mutedRef.current, provider ?? "youtube");
         }
       }, delayMs);
       playbackKickTimersRef.current.push(id);
     },
-    [],
+    [provider],
   );
 
   const clearHideTimer = useCallback(() => {
@@ -359,14 +385,43 @@ function HighlightCard({
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
-      let data: { event?: string; info?: number | { currentTime?: number; duration?: number } };
+      let data: {
+        event?: string;
+        method?: string;
+        info?: number | { currentTime?: number; duration?: number };
+        data?: { seconds?: number; duration?: number; percent?: number };
+      };
       try {
         data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
       } catch {
         return;
       }
+
+      if (provider === "vimeo") {
+        const eventName = data.event || data.method;
+        if (eventName === "ready" && !playbackPausedRef.current) {
+          kickPlayback(iframeRef.current, mutedRef.current, "vimeo");
+        }
+        if (eventName === "ended" && !ignoreEndRef.current) {
+          if (playbackPausedRef.current || wasPausedRef.current) return;
+          postToVimeo(iframeRef.current, "setCurrentTime", 0);
+          postToVimeo(iframeRef.current, "play");
+          setProgress(0);
+        }
+        if (eventName === "timeupdate" && data.data && typeof data.data === "object") {
+          const percent = data.data.percent;
+          if (typeof percent === "number") {
+            setProgress(Math.min(100, percent * 100));
+          } else {
+            const { seconds = 0, duration = 0 } = data.data;
+            if (duration > 0) setProgress(Math.min(100, (seconds / duration) * 100));
+          }
+        }
+        return;
+      }
+
       if (data.event === "onReady" && !playbackPausedRef.current) {
-        kickPlayback(iframeRef.current, mutedRef.current);
+        kickPlayback(iframeRef.current, mutedRef.current, "youtube");
       }
       if (
         data.event === "onStateChange" &&
@@ -393,7 +448,7 @@ function HighlightCard({
       window.removeEventListener("message", onMessage);
       clearPlaybackKickTimers();
     };
-  }, [iframeMounted, onClose, clearPlaybackKickTimers]);
+  }, [iframeMounted, onClose, clearPlaybackKickTimers, provider]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -442,30 +497,36 @@ function HighlightCard({
 
   useEffect(() => {
     if (!iframeMounted) return;
-    listenToPlayer(iframeRef.current);
     if (playbackPaused) {
-      postToPlayer(iframeRef.current, "pauseVideo");
+      if (provider === "vimeo") postToVimeo(iframeRef.current, "pause");
+      else postToPlayer(iframeRef.current, "pauseVideo");
       wasPausedRef.current = true;
       return;
     }
     wasPausedRef.current = false;
-    kickPlayback(iframeRef.current, muted);
+    kickPlayback(iframeRef.current, muted, provider ?? "youtube");
     schedulePlaybackKick(iframeRef.current, 200);
     schedulePlaybackKick(iframeRef.current, 600);
     schedulePlaybackKick(iframeRef.current, 1200);
-  }, [iframeMounted, playbackPaused, muted, schedulePlaybackKick]);
+  }, [iframeMounted, playbackPaused, muted, schedulePlaybackKick, provider]);
 
   useEffect(() => {
     if (!iframeMounted) return;
+    if (provider === "vimeo") {
+      postToVimeo(iframeRef.current, "setMuted", muted);
+      postToVimeo(iframeRef.current, "setVolume", muted ? 0 : 1);
+      return;
+    }
     postToPlayer(iframeRef.current, muted ? "mute" : "unMute");
-  }, [muted, iframeMounted]);
+  }, [muted, iframeMounted, provider]);
 
   useEffect(() => {
     if (!iframeMounted || playbackPaused) return;
     if (!wasPausedRef.current) return;
-    postToPlayer(iframeRef.current, "playVideo");
+    if (provider === "vimeo") postToVimeo(iframeRef.current, "play");
+    else postToPlayer(iframeRef.current, "playVideo");
     wasPausedRef.current = false;
-  }, [playbackPaused, iframeMounted]);
+  }, [playbackPaused, iframeMounted, provider]);
 
   const handleCenterPlay = (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -475,7 +536,7 @@ function HighlightCard({
     if (useHosted) {
       void videoRef.current?.play().catch(() => {});
     } else {
-      kickPlayback(iframeRef.current, mutedRef.current);
+      kickPlayback(iframeRef.current, mutedRef.current, provider ?? "youtube");
     }
     wasPausedRef.current = false;
     onResume();
@@ -489,6 +550,8 @@ function HighlightCard({
     ignoreEndRef.current = true;
     if (useHosted) {
       videoRef.current?.pause();
+    } else if (provider === "vimeo") {
+      postToVimeo(iframeRef.current, "pause");
     } else {
       postToPlayer(iframeRef.current, "pauseVideo");
     }
@@ -618,16 +681,15 @@ function HighlightCard({
           ) : sessionEmbedSrc ? (
             <iframe
               ref={iframeRef}
-              key={videoId}
+              key={sessionEmbedSrc}
               src={sessionEmbedSrc}
               title={item.title || "Highlight video"}
               className="pointer-events-none absolute inset-0 z-0 h-full w-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               onLoad={() => {
-                listenToPlayer(iframeRef.current);
                 if (!playbackPausedRef.current) {
-                  kickPlayback(iframeRef.current, mutedRef.current);
+                  kickPlayback(iframeRef.current, mutedRef.current, provider ?? "youtube");
                 }
               }}
             />
@@ -1263,7 +1325,12 @@ export function HighlightedEditsGallery({
   }, []);
 
   const visible = items.filter(
-    (it) => youtubeVideoIdFromUrl(it.href ?? "") || it.title?.trim() || it.views?.trim(),
+    (it) =>
+      youtubeVideoIdFromUrl(it.href ?? "") ||
+      vimeoFromUrl(it.href ?? "") ||
+      it.fileUrl?.trim() ||
+      it.title?.trim() ||
+      it.views?.trim(),
   );
   if (visible.length === 0) return null;
 

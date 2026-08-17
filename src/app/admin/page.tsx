@@ -12,7 +12,8 @@ import type {
 } from "@/lib/content-types";
 import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
-import { normalizeYouTubeHref, youtubeThumbnailFromUrl, youtubeVideoIdFromUrl } from "@/lib/youtube";
+import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
+import { normalizeYouTubeHref, youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -56,8 +57,9 @@ function HighlightVideoThumb({
   posterUrl?: string;
   className?: string;
 }) {
-  const thumb = posterUrl || (fileUrl ? "" : youtubeThumbnailFromUrl(href));
-  const videoId = youtubeVideoIdFromUrl(href);
+  const thumb = posterUrl || (fileUrl ? "" : highlightThumbnailFromUrl(href));
+  const youtubeId = youtubeVideoIdFromUrl(href);
+  const vimeo = vimeoFromUrl(href);
   const hosted = Boolean(fileUrl?.trim());
 
   if (hosted && !thumb) {
@@ -83,7 +85,7 @@ function HighlightVideoThumb({
   return (
     <img
       src={thumb}
-      alt={videoId ? `Preview for ${videoId}` : "Video preview"}
+      alt={youtubeId ? `YouTube preview ${youtubeId}` : vimeo ? `Vimeo preview ${vimeo.id}` : "Video preview"}
       className={`shrink-0 rounded-lg border border-zinc-700 object-cover ${className ?? "h-16 w-[4.5rem]"}`}
     />
   );
@@ -730,9 +732,8 @@ export default function AdminPage() {
               <div className="flex flex-col gap-3">
                 <h2 className="text-base font-semibold sm:text-lg">Highlighted edits</h2>
                 <p className="text-sm text-zinc-400">
-                  Use YouTube links for most videos. If a video is blocked from embedding, upload an MP4/WebM/MOV
-                  file instead — it is stored on Vercel Blob in production (or locally under{" "}
-                  <code className="text-zinc-300">/uploads/highlights</code> in dev).
+                  Paste a YouTube or Vimeo link. If YouTube blocks embedding, upload the same cut to Vimeo and paste
+                  that URL here — it plays in the gallery without a file upload.
                 </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
@@ -806,14 +807,14 @@ export default function AdminPage() {
                   </div>
                   <Field label="Title" value={item.title} onChange={(v) => updateHighlight(i, { title: v })} />
                   <Field
-                    label="YouTube URL"
+                    label="YouTube or Vimeo URL"
                     value={item.href}
                     onChange={(v) => updateHighlight(i, { href: v })}
                     onBlur={() => {
                       const normalized = normalizeYouTubeHref(item.href);
                       if (normalized !== item.href) updateHighlight(i, { href: normalized });
                     }}
-                    hint="Paste any YouTube watch, Shorts, or youtu.be link (optional if you upload a file below)"
+                    hint="YouTube watch/Shorts/youtu.be, or vimeo.com / player.vimeo.com (optional if you upload a file)"
                   />
                   {item.fileUrl?.trim() ? (
                     <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-3 py-2">
@@ -845,7 +846,7 @@ export default function AdminPage() {
                   ) : (
                     <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-950/40 px-3 py-3">
                       <p className="text-xs text-zinc-400">
-                        YouTube blocked or unavailable? Upload the video file here (max 100 MB).
+                        Prefer Vimeo if YouTube blocks the video. File upload is a backup (max 100 MB).
                       </p>
                       <button
                         type="button"
@@ -863,15 +864,20 @@ export default function AdminPage() {
                     </div>
                   )}
                   {item.href.trim() ? (
-                    youtubeVideoIdFromUrl(item.href) ? (
+                    highlightProviderFromUrl(item.href) === "youtube" ? (
                       <p className="text-xs text-emerald-400">
-                        Video ID: {youtubeVideoIdFromUrl(item.href)} — YouTube embed available
+                        YouTube ID: {youtubeVideoIdFromUrl(item.href)} — will play in the gallery
+                        {item.fileUrl?.trim() ? " (hosted file takes precedence if both are set)" : ""}
+                      </p>
+                    ) : highlightProviderFromUrl(item.href) === "vimeo" ? (
+                      <p className="text-xs text-emerald-400">
+                        Vimeo ID: {vimeoFromUrl(item.href)?.id} — will play in the gallery
                         {item.fileUrl?.trim() ? " (hosted file takes precedence if both are set)" : ""}
                       </p>
                     ) : (
                       <p className="text-xs text-amber-400">
-                        Could not read a YouTube video ID from this URL.
-                        {item.fileUrl?.trim() ? " Hosted file will be used instead." : " Upload a file or fix the URL."}
+                        Could not read a YouTube or Vimeo ID from this URL.
+                        {item.fileUrl?.trim() ? " Hosted file will be used instead." : " Paste a Vimeo link or upload a file."}
                       </p>
                     )
                   ) : item.fileUrl?.trim() ? (

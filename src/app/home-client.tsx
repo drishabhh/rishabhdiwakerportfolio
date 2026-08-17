@@ -17,7 +17,8 @@ import type { SiteContent } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { smoothScrollToY } from "@/lib/smooth-scroll";
-import { normalizeYouTubeHref, youtubeThumbnailFromUrl } from "@/lib/youtube";
+import { normalizeYouTubeHref } from "@/lib/youtube";
+import { highlightThumbnailFromUrl } from "@/lib/vimeo";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
@@ -232,7 +233,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         return {
           ...item,
           href,
-          thumbnail: item.posterUrl || (hosted ? "" : youtubeThumbnailFromUrl(href)),
+          thumbnail: item.posterUrl || (hosted ? "" : highlightThumbnailFromUrl(href)),
           thumbUnoptimized: hosted || Boolean(item.posterUrl),
         };
       }),
