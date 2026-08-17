@@ -4,6 +4,7 @@ import Image from "next/image";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { vimeoEmbedSrc, vimeoFromUrl, vimeoThumbnailFromUrl } from "@/lib/vimeo";
+import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -185,7 +186,7 @@ function HighlightCard({
   onToggleMute,
 }: CardProps) {
   const poster = posterFor(item);
-  const fileUrl = item.fileUrl?.trim() ?? "";
+  const fileUrl = mediaSrcFromBlob(item.fileUrl?.trim() ?? "");
   const useHosted = Boolean(fileUrl);
   const youtubeId = useHosted ? "" : youtubeVideoIdFromUrl(item.href ?? "");
   const vimeoRef = useHosted ? null : vimeoFromUrl(item.href ?? "");

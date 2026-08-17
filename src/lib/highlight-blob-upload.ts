@@ -1,3 +1,5 @@
+import { mediaSrcFromBlob } from "@/lib/blob-media";
+
 /** Same-origin proxy (see next.config rewrites). Avoids Safari/ad-blockers blocking vercel.com. */
 const BLOB_API = "/api/admin/highlight-blob";
 
@@ -50,7 +52,7 @@ export function xhrPutHighlightToBlob(
     xhr.responseType = "text";
     xhr.setRequestHeader("authorization", `Bearer ${clientToken}`);
     xhr.setRequestHeader("x-api-version", "12");
-    xhr.setRequestHeader("x-vercel-blob-access", "public");
+    xhr.setRequestHeader("x-vercel-blob-access", "private");
     xhr.setRequestHeader("x-content-type", contentType);
     xhr.setRequestHeader("x-content-length", String(file.size));
     if (storeId) xhr.setRequestHeader("x-vercel-blob-store-id", storeId);
@@ -64,10 +66,11 @@ export function xhrPutHighlightToBlob(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const parsed = JSON.parse(xhr.responseText) as { url?: string };
-          if (!parsed.url) throw new Error("Blob did not return a URL");
+          const parsed = JSON.parse(xhr.responseText) as { url?: string; pathname?: string };
+          const src = mediaSrcFromBlob(parsed);
+          if (!src) throw new Error("Blob did not return a URL");
           onProgress(100);
-          resolve(parsed.url);
+          resolve(src);
         } catch (error) {
           reject(error instanceof Error ? error : new Error("Invalid Blob response"));
         }

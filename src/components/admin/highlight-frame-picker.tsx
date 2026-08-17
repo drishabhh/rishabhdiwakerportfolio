@@ -1,5 +1,6 @@
 "use client";
 
+import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { captureVideoFrames, vimeoFrameUrls, youtubeFrameUrls } from "@/lib/highlight-frames";
 import { useEffect, useMemo, useState } from "react";
 
@@ -18,7 +19,7 @@ export function HighlightFramePicker({ href, fileUrl, selectedUrl, onSelect }: H
   const [captureError, setCaptureError] = useState("");
 
   useEffect(() => {
-    const src = fileUrl?.trim();
+    const src = fileUrl?.trim() ? mediaSrcFromBlob(fileUrl) : "";
     if (!src) {
       setFileFrames([]);
       setCaptureError("");

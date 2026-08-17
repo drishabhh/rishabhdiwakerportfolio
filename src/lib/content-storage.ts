@@ -1,4 +1,7 @@
-import { get, head, put } from "@vercel/blob";
+import { get, put } from "@vercel/blob";
+import { mediaSrcFromPathname } from "@/lib/blob-media";
+
+const BLOB_ACCESS = "private" as const;
 
 const CONTENT_BLOB_PATH = "portfolio/content.json";
 const FAVICON_BLOB_PREFIX = "portfolio/favicon";
@@ -16,8 +19,7 @@ export function hasBlobStorage(): boolean {
 export async function readBlobText(pathname: string): Promise<string | null> {
   if (!hasBlobStorage()) return null;
   try {
-    await head(pathname);
-    const result = await get(pathname, { access: "public" });
+    const result = await get(pathname, { access: BLOB_ACCESS });
     if (!result || result.statusCode !== 200 || !result.stream) return null;
     return await new Response(result.stream).text();
   } catch {
@@ -30,7 +32,7 @@ export async function writeBlobText(pathname: string, body: string, contentType:
     throw new Error("BLOB_STORAGE_UNAVAILABLE");
   }
   await put(pathname, body, {
-    access: "public",
+    access: BLOB_ACCESS,
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType,
@@ -42,12 +44,12 @@ export async function writeBlobFile(pathname: string, body: Buffer, contentType:
     throw new Error("BLOB_STORAGE_UNAVAILABLE");
   }
   const result = await put(pathname, body, {
-    access: "public",
+    access: BLOB_ACCESS,
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType,
   });
-  return result.url;
+  return mediaSrcFromPathname(result.pathname || pathname);
 }
 
 export { CONTENT_BLOB_PATH, FAVICON_BLOB_PREFIX, HIGHLIGHT_VIDEO_BLOB_PREFIX, RESUME_BLOB_PATH };
