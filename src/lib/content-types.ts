@@ -4,6 +4,10 @@ export type HighlightItem = {
   caption?: string;
   href: string;
   badge?: string;
+  /** Self-hosted MP4/WebM when YouTube blocks embed or playback */
+  fileUrl?: string;
+  /** Optional custom poster; falls back to YouTube thumb or first frame */
+  posterUrl?: string;
 };
 
 export type SkillBlock = {

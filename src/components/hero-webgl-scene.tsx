@@ -109,8 +109,8 @@ function HeroImagePlane({
       w = viewport.height * imageAspect;
     }
 
-    const coverWidth = w * 1.08;
-    const coverHeight = h * 1.08;
+    const coverWidth = w * 1.14;
+    const coverHeight = h * 1.14;
     const [xRaw] = objectPosition.trim().split(/\s+/);
     const pixelShift =
       xRaw?.endsWith("px") && typeof window !== "undefined"
@@ -144,12 +144,18 @@ function HeroImagePlane({
     const py = pointerSmooth.current.y;
 
     const p = progress.get();
-    mesh.position.z = -p * 1.4;
+    const recedeZ = -p * 1.4;
+    mesh.position.z = recedeZ;
     mesh.position.x = offsetX + px * 0.12 * t;
     mesh.position.y = py * 0.16 * t;
     mesh.rotation.x = py * 0.07 * t;
     mesh.rotation.y = -px * 0.09 * t;
-    const scale = 1 + p * 0.1;
+    /* Camera sits at z=5.2; moving the plane back shrinks it on screen.
+       Scale by distance so the image still covers the viewport at page end. */
+    const cameraZ = 5.2;
+    const distanceScale = (cameraZ - recedeZ) / cameraZ;
+    const zoomIn = 1 + p * 0.08;
+    const scale = distanceScale * zoomIn;
     mesh.scale.set(scale, scale, scale);
   });
 

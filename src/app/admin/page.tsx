@@ -44,9 +44,30 @@ const sections: { id: SectionId; label: string }[] = [
   { id: "seo", label: "SEO" },
 ];
 
-function HighlightVideoThumb({ href, className }: { href: string; className?: string }) {
-  const thumb = youtubeThumbnailFromUrl(href);
+function HighlightVideoThumb({
+  href,
+  fileUrl,
+  posterUrl,
+  className,
+}: {
+  href: string;
+  fileUrl?: string;
+  posterUrl?: string;
+  className?: string;
+}) {
+  const thumb = posterUrl || (fileUrl ? "" : youtubeThumbnailFromUrl(href));
   const videoId = youtubeVideoIdFromUrl(href);
+  const hosted = Boolean(fileUrl?.trim());
+
+  if (hosted && !thumb) {
+    return (
+      <div
+        className={`flex shrink-0 flex-col items-center justify-center rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-1 text-center text-[9px] font-medium uppercase tracking-wide text-emerald-300 ${className ?? "h-16 w-[4.5rem]"}`}
+      >
+        Hosted
+      </div>
+    );
+  }
 
   if (!thumb) {
     return (
@@ -195,6 +216,12 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       >
         <h1 className="text-xl font-bold text-white">Portfolio Admin</h1>
         <p className="mt-2 text-sm text-zinc-400">Sign in to edit videos and site text.</p>
+        {process.env.NODE_ENV === "development" ? (
+          <p className="mt-3 rounded-lg border border-zinc-700/80 bg-zinc-950/80 px-3 py-2 text-xs text-zinc-400">
+            Local dev password: <span className="font-mono text-zinc-200">admin</span>
+            {" — override with ADMIN_PASSWORD in .env.local"}
+          </p>
+        ) : null}
         <label className="mt-6 block">
           <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">Password</span>
           <input
@@ -228,6 +255,9 @@ export default function AdminPage() {
   const [iconError, setIconError] = useState("");
   const [uploadingResume, setUploadingResume] = useState(false);
   const [resumeError, setResumeError] = useState("");
+  const [uploadingHighlightIndex, setUploadingHighlightIndex] = useState<number | null>(null);
+  const highlightFileInputRef = useRef<HTMLInputElement>(null);
+  const [highlightUploadTarget, setHighlightUploadTarget] = useState<number | null>(null);
 
   const loadSession = useCallback(async () => {
     const res = await fetch("/api/admin/session");
@@ -321,6 +351,43 @@ export default function AdminPage() {
     );
     setMessage("Resume uploaded! The download button on the site is updated.");
     setTimeout(() => setMessage(""), 4000);
+  };
+
+  const uploadHighlightVideo = async (index: number, file: File) => {
+    setUploadingHighlightIndex(index);
+    setMessage("");
+
+    try {
+      let url: string | undefined;
+
+      try {
+        const { upload } = await import("@vercel/blob/client");
+        const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+        const blob = await upload(`portfolio/highlights/${Date.now()}.${ext}`, file, {
+          access: "public",
+          handleUploadUrl: "/api/admin/highlight-video",
+        });
+        url = blob.url;
+      } catch {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/admin/highlight-video", { method: "POST", body: formData });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          throw new Error(data.error || "Upload failed");
+        }
+        const data = (await res.json()) as { url: string };
+        url = data.url;
+      }
+
+      updateHighlight(index, { fileUrl: url });
+      setMessage("Video uploaded! Click Save to publish it on the site.");
+      setTimeout(() => setMessage(""), 5000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Video upload failed");
+    } finally {
+      setUploadingHighlightIndex(null);
+    }
   };
 
   if (authenticated === null) {
@@ -640,7 +707,12 @@ export default function AdminPage() {
           {activeSection === "highlights" && (
             <section className="space-y-4">
               <div className="flex flex-col gap-3">
-                <h2 className="text-base font-semibold sm:text-lg">Highlighted edits (YouTube videos)</h2>
+                <h2 className="text-base font-semibold sm:text-lg">Highlighted edits</h2>
+                <p className="text-sm text-zinc-400">
+                  Use YouTube links for most videos. If a video is blocked from embedding, upload an MP4/WebM/MOV
+                  file instead — it is stored on Vercel Blob in production (or locally under{" "}
+                  <code className="text-zinc-300">/uploads/highlights</code> in dev).
+                </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
                     type="button"
@@ -669,11 +741,29 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <input
+                ref={highlightFileInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  const target = highlightUploadTarget;
+                  e.target.value = "";
+                  setHighlightUploadTarget(null);
+                  if (file && target != null) void uploadHighlightVideo(target, file);
+                }}
+              />
+
               {content.highlights.items.map((item, i) => (
                 <div key={`${item.href}-${i}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <HighlightVideoThumb href={item.href} />
+                      <HighlightVideoThumb
+                        href={item.href}
+                        fileUrl={item.fileUrl}
+                        posterUrl={item.posterUrl}
+                      />
                       <div className="min-w-0 pt-0.5">
                         <p className="text-sm font-medium text-zinc-300">Video {i + 1}</p>
                         {item.title ? (
@@ -702,19 +792,72 @@ export default function AdminPage() {
                       const normalized = normalizeYouTubeHref(item.href);
                       if (normalized !== item.href) updateHighlight(i, { href: normalized });
                     }}
-                    hint="Paste any YouTube watch, Shorts, or youtu.be link"
+                    hint="Paste any YouTube watch, Shorts, or youtu.be link (optional if you upload a file below)"
                   />
+                  {item.fileUrl?.trim() ? (
+                    <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/20 px-3 py-2">
+                      <p className="text-xs font-medium text-emerald-300">Self-hosted video — plays instead of YouTube</p>
+                      <p className="mt-1 truncate text-xs text-emerald-200/80">{item.fileUrl}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={uploadingHighlightIndex === i}
+                          onClick={() => {
+                            setHighlightUploadTarget(i);
+                            highlightFileInputRef.current?.click();
+                          }}
+                          className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-200 hover:bg-emerald-950/40 disabled:opacity-50"
+                        >
+                          {uploadingHighlightIndex === i ? "Uploading…" : "Replace file"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateHighlight(i, { fileUrl: "" })}
+                          className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800"
+                        >
+                          Remove hosted file
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-950/40 px-3 py-3">
+                      <p className="text-xs text-zinc-400">
+                        YouTube blocked or unavailable? Upload the video file here (max 100 MB).
+                      </p>
+                      <button
+                        type="button"
+                        disabled={uploadingHighlightIndex === i}
+                        onClick={() => {
+                          setHighlightUploadTarget(i);
+                          highlightFileInputRef.current?.click();
+                        }}
+                        className="mt-2 rounded-lg border border-orange-700/60 bg-orange-950/30 px-3 py-2 text-xs text-orange-200 hover:bg-orange-950/50 disabled:opacity-50"
+                      >
+                        {uploadingHighlightIndex === i ? "Uploading…" : "Upload video file"}
+                      </button>
+                    </div>
+                  )}
                   {item.href.trim() ? (
                     youtubeVideoIdFromUrl(item.href) ? (
                       <p className="text-xs text-emerald-400">
-                        Video ID: {youtubeVideoIdFromUrl(item.href)} — will play in gallery
+                        Video ID: {youtubeVideoIdFromUrl(item.href)} — YouTube embed available
+                        {item.fileUrl?.trim() ? " (hosted file takes precedence if both are set)" : ""}
                       </p>
                     ) : (
-                      <p className="text-xs text-red-400">
-                        Could not read a video ID from this URL. Use a direct watch, Shorts, or youtu.be link.
+                      <p className="text-xs text-amber-400">
+                        Could not read a YouTube video ID from this URL.
+                        {item.fileUrl?.trim() ? " Hosted file will be used instead." : " Upload a file or fix the URL."}
                       </p>
                     )
+                  ) : item.fileUrl?.trim() ? (
+                    <p className="text-xs text-emerald-400">Hosted file will play in the gallery.</p>
                   ) : null}
+                  <Field
+                    label="Poster image URL (optional)"
+                    value={item.posterUrl || ""}
+                    onChange={(v) => updateHighlight(i, { posterUrl: v })}
+                    hint="Custom thumbnail for hosted videos — leave blank to use the video's first frame area"
+                  />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Views / metric" value={item.views} onChange={(v) => updateHighlight(i, { views: v })} />
                     <Field label="Badge (optional)" value={item.badge || ""} onChange={(v) => updateHighlight(i, { badge: v })} />
@@ -747,7 +890,12 @@ export default function AdminPage() {
                         className="flex flex-col gap-2 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="flex min-w-0 items-center gap-3">
-                          <HighlightVideoThumb href={item.href} className="h-12 w-16" />
+                          <HighlightVideoThumb
+                            href={item.href}
+                            fileUrl={item.fileUrl}
+                            posterUrl={item.posterUrl}
+                            className="h-12 w-16"
+                          />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-zinc-200">{item.title || "Untitled"}</p>
                             <p className="truncate text-xs text-zinc-500">{item.href || "No URL"}</p>

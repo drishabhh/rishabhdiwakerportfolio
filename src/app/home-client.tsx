@@ -228,10 +228,12 @@ export default function HomeClient({ content }: HomeClientProps) {
     () =>
       content.highlights.items.map((item) => {
         const href = normalizeYouTubeHref(item.href);
+        const hosted = Boolean(item.fileUrl?.trim());
         return {
           ...item,
           href,
-          thumbnail: youtubeThumbnailFromUrl(href),
+          thumbnail: item.posterUrl || (hosted ? "" : youtubeThumbnailFromUrl(href)),
+          thumbUnoptimized: hosted || Boolean(item.posterUrl),
         };
       }),
     [content.highlights.items],
@@ -794,6 +796,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         <CinematicSection
           id="summary"
           depth="medium"
+          revealSpeed="fast"
           className="scroll-mt-28 flex flex-col gap-10 pt-2 md:gap-14 md:pt-4"
         >
           <div id="summary-bio" className="scroll-mt-28">

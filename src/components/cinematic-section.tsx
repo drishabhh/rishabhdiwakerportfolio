@@ -15,6 +15,8 @@ type CinematicSectionProps = {
   divider?: boolean;
   /** Scroll-linked fade/lift reveal (skip on heavy sections for perf) */
   reveal?: boolean;
+  /** "fast" resolves the entrance early in the scroll range instead of mid-way */
+  revealSpeed?: "normal" | "fast";
 };
 
 const DEPTH = {
@@ -22,6 +24,37 @@ const DEPTH = {
   medium: { rotate: 5.5, z: 52, y: 28 },
   deep: { rotate: 7, z: 68, y: 36 },
 } as const;
+
+type EnterRange = {
+  opacity: number[];
+  opacityTo: number[];
+  y: number[];
+  yFrom: number[];
+  scale: number[];
+  scaleFrom: number[];
+  depth: number[];
+};
+
+const ENTER: Record<"normal" | "fast", EnterRange> = {
+  normal: {
+    opacity: [0, 0.14, 0.3, 0.78, 1],
+    opacityTo: [0.22, 0.72, 1, 1, 0.92],
+    y: [0, 0.22, 0.38],
+    yFrom: [36, 10, 0],
+    scale: [0, 0.28, 0.42],
+    scaleFrom: [0.975, 0.995, 1],
+    depth: [0, 0.45, 0.55, 1],
+  },
+  fast: {
+    opacity: [0, 0.05, 0.12, 0.86, 1],
+    opacityTo: [0.55, 0.92, 1, 1, 0.97],
+    y: [0, 0.07, 0.15],
+    yFrom: [20, 6, 0],
+    scale: [0, 0.09, 0.17],
+    scaleFrom: [0.99, 0.998, 1],
+    depth: [0, 0.18, 0.74, 1],
+  },
+};
 
 function SectionDivider() {
   return (
@@ -43,6 +76,7 @@ export function CinematicSection({
   depth,
   divider = false,
   reveal = true,
+  revealSpeed = "normal",
 }: CinematicSectionProps) {
   const ref = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
@@ -60,20 +94,18 @@ export function CinematicSection({
   const scrollYProgress = useNativeSectionScrollProgress(ref, motionEnabled && !isMobile);
   const useReveal = reveal && motionEnabled && !isMobile;
 
+  const enter = ENTER[revealSpeed];
+
   const revealOpacity = useTransform(
     scrollYProgress,
-    [0, 0.14, 0.3, 0.78, 1],
-    useReveal ? [0.22, 0.72, 1, 1, 0.92] : [1, 1, 1, 1, 1],
+    enter.opacity,
+    useReveal ? enter.opacityTo : [1, 1, 1, 1, 1],
   );
-  const revealY = useTransform(
-    scrollYProgress,
-    [0, 0.22, 0.38],
-    useReveal ? [36, 10, 0] : [0, 0, 0],
-  );
+  const revealY = useTransform(scrollYProgress, enter.y, useReveal ? enter.yFrom : [0, 0, 0]);
   const revealScale = useTransform(
     scrollYProgress,
-    [0, 0.28, 0.42],
-    useReveal ? [0.975, 0.995, 1] : [1, 1, 1],
+    enter.scale,
+    useReveal ? enter.scaleFrom : [1, 1, 1],
   );
 
   const depthCfg = depth ? DEPTH[depth] : null;
@@ -81,22 +113,22 @@ export function CinematicSection({
 
   const rotateX = useTransform(
     scrollYProgress,
-    [0, 0.45, 0.55, 1],
+    enter.depth,
     useDepth ? [depthCfg!.rotate, 0, 0, -depthCfg!.rotate * 0.45] : [0, 0, 0, 0],
   );
   const depthZ = useTransform(
     scrollYProgress,
-    [0, 0.45, 0.55, 1],
+    enter.depth,
     useDepth ? [-depthCfg!.z * 0.7, 0, 0, -depthCfg!.z * 0.35] : [0, 0, 0, 0],
   );
   const depthY = useTransform(
     scrollYProgress,
-    [0, 0.45, 0.55, 1],
+    enter.depth,
     useDepth ? [depthCfg!.y * 0.75, 0, 0, -depthCfg!.y * 0.3] : [0, 0, 0, 0],
   );
   const depthScale = useTransform(
     scrollYProgress,
-    [0, 0.45, 0.55, 1],
+    enter.depth,
     useDepth ? [0.98, 1, 1, 0.99] : [1, 1, 1, 1],
   );
 

@@ -37,9 +37,10 @@ export function verifySessionToken(token: string | undefined): boolean {
 
 export function verifyPassword(password: string): boolean {
   const expected = process.env.ADMIN_PASSWORD || "admin";
-  if (password.length !== expected.length) return false;
+  const normalized = password.trim();
+  if (normalized.length !== expected.length) return false;
   try {
-    return timingSafeEqual(Buffer.from(password), Buffer.from(expected));
+    return timingSafeEqual(Buffer.from(normalized), Buffer.from(expected));
   } catch {
     return false;
   }

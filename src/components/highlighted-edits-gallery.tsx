@@ -103,6 +103,8 @@ export type HighlightEditItem = {
   thumbUnoptimized?: boolean;
   href?: string;
   badge?: string;
+  fileUrl?: string;
+  posterUrl?: string;
 };
 
 type HighlightedEditsGalleryProps = {
@@ -112,6 +114,7 @@ type HighlightedEditsGalleryProps = {
 };
 
 function posterFor(item: HighlightEditItem): string {
+  if (item.posterUrl) return item.posterUrl;
   if (item.thumbnail) return item.thumbnail;
   const id = youtubeVideoIdFromUrl(item.href ?? "");
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
@@ -160,9 +163,12 @@ function HighlightCard({
   onToggleMute,
 }: CardProps) {
   const poster = posterFor(item);
-  const videoId = youtubeVideoIdFromUrl(item.href ?? "");
-  const playable = Boolean(videoId);
+  const fileUrl = item.fileUrl?.trim() ?? "";
+  const useHosted = Boolean(fileUrl);
+  const videoId = useHosted ? "" : youtubeVideoIdFromUrl(item.href ?? "");
+  const playable = useHosted || Boolean(videoId);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const ignoreEndRef = useRef(false);
   const wasPausedRef = useRef(false);
@@ -172,6 +178,7 @@ function HighlightCard({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeMounted = isActive && Boolean(videoId);
+  const videoMounted = isActive && useHosted;
   const playing = isActive && !playbackPaused;
   const [progress, setProgress] = useState(0);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -345,7 +352,7 @@ function HighlightCard({
 
   useEffect(() => {
     if (!iframeMounted) {
-      setProgress(0);
+      if (!videoMounted) setProgress(0);
       clearPlaybackKickTimers();
       return;
     }
@@ -389,6 +396,51 @@ function HighlightCard({
   }, [iframeMounted, onClose, clearPlaybackKickTimers]);
 
   useEffect(() => {
+    const video = videoRef.current;
+    if (!videoMounted || !video) return;
+
+    const syncProgress = () => {
+      if (video.duration > 0) {
+        setProgress(Math.min(100, (video.currentTime / video.duration) * 100));
+      }
+    };
+
+    const onEnded = () => {
+      if (ignoreEndRef.current || playbackPausedRef.current || wasPausedRef.current) return;
+      video.currentTime = 0;
+      void video.play().catch(() => {});
+      setProgress(0);
+    };
+
+    video.addEventListener("timeupdate", syncProgress);
+    video.addEventListener("ended", onEnded);
+    return () => {
+      video.removeEventListener("timeupdate", syncProgress);
+      video.removeEventListener("ended", onEnded);
+    };
+  }, [videoMounted]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!videoMounted || !video) return;
+
+    if (playbackPaused) {
+      video.pause();
+      wasPausedRef.current = true;
+      return;
+    }
+
+    wasPausedRef.current = false;
+    void video.play().catch(() => {});
+  }, [videoMounted, playbackPaused]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!videoMounted || !video) return;
+    video.muted = muted;
+  }, [muted, videoMounted]);
+
+  useEffect(() => {
     if (!iframeMounted) return;
     listenToPlayer(iframeRef.current);
     if (playbackPaused) {
@@ -420,7 +472,11 @@ function HighlightCard({
     e.stopPropagation();
     (e.currentTarget as HTMLButtonElement).blur();
     bumpControlsTimer();
-    kickPlayback(iframeRef.current, mutedRef.current);
+    if (useHosted) {
+      void videoRef.current?.play().catch(() => {});
+    } else {
+      kickPlayback(iframeRef.current, mutedRef.current);
+    }
     wasPausedRef.current = false;
     onResume();
   };
@@ -431,7 +487,11 @@ function HighlightCard({
     (e.currentTarget as HTMLButtonElement).blur();
     bumpControlsTimer();
     ignoreEndRef.current = true;
-    postToPlayer(iframeRef.current, "pauseVideo");
+    if (useHosted) {
+      videoRef.current?.pause();
+    } else {
+      postToPlayer(iframeRef.current, "pauseVideo");
+    }
     wasPausedRef.current = true;
     onPause();
     window.setTimeout(() => {
@@ -543,7 +603,19 @@ function HighlightCard({
 
       {isActive ? (
         <>
-          {sessionEmbedSrc ? (
+          {videoMounted ? (
+            <video
+              ref={videoRef}
+              src={fileUrl}
+              poster={poster || undefined}
+              title={item.title || "Highlight video"}
+              className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
+              playsInline
+              loop
+              muted
+              preload="metadata"
+            />
+          ) : sessionEmbedSrc ? (
             <iframe
               ref={iframeRef}
               key={videoId}
@@ -1047,12 +1119,14 @@ function DesktopMarquee({
   const pausePlayback = useCallback(() => setPlaybackPaused(true), []);
   const resumePlayback = useCallback(() => setPlaybackPaused(false), []);
 
+  const marqueeDragBlocked = activeSlot !== null && !playbackPaused;
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const onWheel = (e: WheelEvent) => {
-      if (activeSlot !== null && !playbackPaused) return;
+      if (marqueeDragBlocked) return;
       const delta = horizontalWheelDelta(e);
       if (delta === 0) return;
       e.preventDefault();
@@ -1062,7 +1136,7 @@ function DesktopMarquee({
 
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [activeSlot, playbackPaused, wrapOffset]);
+  }, [marqueeDragBlocked, wrapOffset]);
 
   if (itemCount === 0) return null;
 
@@ -1105,7 +1179,7 @@ function DesktopMarquee({
       <div
         ref={containerRef}
         className={`relative w-full overflow-hidden py-4 select-none ${
-          activeSlot ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
+          marqueeDragBlocked ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         onMouseEnter={() => {
           hoveredRef.current = true;
@@ -1118,7 +1192,7 @@ function DesktopMarquee({
           syncAutoScrollTarget();
         }}
         onPointerDownCapture={(e) => {
-          if (activeSlot !== null) return;
+          if (marqueeDragBlocked) return;
           if (e.button !== 0) return;
           if ((e.target as HTMLElement).closest("button")) return;
 
@@ -1130,7 +1204,7 @@ function DesktopMarquee({
           speedTargetRef.current = 0;
         }}
         onPointerMove={(e) => {
-          if (activeSlot !== null) return;
+          if (marqueeDragBlocked) return;
           if (e.buttons !== 1) return;
 
           const dx = e.clientX - dragStartXRef.current;
@@ -1145,7 +1219,7 @@ function DesktopMarquee({
           }
         }}
         onPointerDown={(e) => {
-          if (activeSlot !== null) return;
+          if (marqueeDragBlocked) return;
           if (e.button !== 0) return;
           if ((e.target as HTMLElement).closest("button")) return;
           dragStartXRef.current = e.clientX;
