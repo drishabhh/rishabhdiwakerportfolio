@@ -29,62 +29,72 @@
   "highlights": {
     "items": [
       {
-        "title": "UGC",
-        "views": "",
-        "caption": "",
-        "href": "https://vimeo.com/1219034547?share=copy&fl=sv&fe=ci",
-        "badge": ""
-      },
-      {
         "title": "Promotional",
         "views": "",
         "caption": "",
-        "href": "https://www.youtube.com/watch?v=lVwL8VMkDmY&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe&index=3"
+        "href": "https://www.youtube.com/watch?v=lVwL8VMkDmY&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe&index=3",
+        "order": 1
       },
       {
         "title": "Fitness",
         "views": "",
         "caption": "",
-        "href": "https://www.youtube.com/watch?v=FHkwqGr1pjg&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe"
+        "href": "https://www.youtube.com/watch?v=FHkwqGr1pjg&list=PLdT9F7iP4yrRNHLPGRTZrciZptz_C8aNe",
+        "order": 2
       },
       {
         "title": "Product Reel",
         "views": "",
         "caption": "",
-        "href": "https://www.youtube.com/watch?v=ULoPlgS6u0s&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=23"
+        "href": "https://www.youtube.com/watch?v=ULoPlgS6u0s&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=23",
+        "order": 3
       },
       {
         "title": "Informational Animated + UI Guide",
         "views": "",
         "caption": "",
-        "href": "https://www.youtube.com/watch?v=KviJ-1cMY8g&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL"
+        "href": "https://www.youtube.com/watch?v=KviJ-1cMY8g&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL",
+        "order": 4
+      },
+      {
+        "title": "New highlight",
+        "views": "0",
+        "caption": "",
+        "href": "https://vimeo.com/1219034547?share=copy&fl=sv&fe=ci",
+        "badge": "",
+        "order": 5,
+        "posterUrl": "https://vumbnail.com/1219034547.jpg"
       },
       {
         "title": "Product Review",
         "views": "",
         "caption": "",
-        "href": "https://www.youtube.com/watch?v=cMbVMK77Zco&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=22"
+        "href": "https://www.youtube.com/watch?v=cMbVMK77Zco&list=PLdT9F7iP4yrQEi_9AHG9_jLzv0ObQfFkL&index=22",
+        "order": 6
       },
       {
         "title": "Clothing Brand Showreel",
         "views": "",
         "caption": "",
         "href": "https://www.youtube.com/watch?v=h-V0NykeWRg&list=PLdT9F7iP4yrSzqcvIypf3DHJQYTHNiniO&index=7",
-        "badge": ""
+        "badge": "",
+        "order": 7
       },
       {
         "title": "Animation + Infotainment",
         "views": "",
         "caption": "",
         "href": "https://youtu.be/vJcsQHq-C24?si=pJMimnwrLJfgcOTr",
-        "badge": ""
+        "badge": "",
+        "order": 8
       },
       {
         "title": "Podcast Reel",
         "views": "",
         "caption": "Consider Visuals Only",
         "href": "https://youtube.com/shorts/kqn0ITixFNw?feature=share",
-        "badge": ""
+        "badge": "",
+        "order": 9
       }
     ]
   },
@@ -96,6 +106,15 @@
         "caption": "",
         "href": "",
         "badge": ""
+      },
+      {
+        "title": "UGC",
+        "views": "",
+        "caption": "",
+        "href": "https://vimeo.com/1219034547?share=copy&fl=sv&fe=ci",
+        "badge": "",
+        "order": 1,
+        "posterUrl": "https://vumbnail.com/1219034547.jpg"
       }
     ]
   },
