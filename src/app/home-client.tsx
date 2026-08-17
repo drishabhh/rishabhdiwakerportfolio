@@ -20,6 +20,7 @@ import { smoothScrollToY } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref } from "@/lib/youtube";
 import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
+import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
@@ -231,11 +232,14 @@ export default function HomeClient({ content }: HomeClientProps) {
       sortedHighlights(content.highlights.items).map((item) => {
         const href = normalizeYouTubeHref(item.href);
         const hosted = Boolean(item.fileUrl?.trim());
+        const poster = item.posterUrl?.trim() ? mediaSrcFromBlob(item.posterUrl) : "";
         return {
           ...item,
           href,
-          thumbnail: item.posterUrl || (hosted ? "" : highlightThumbnailFromUrl(href)),
-          thumbUnoptimized: hosted || Boolean(item.posterUrl?.startsWith("data:")),
+          thumbnail: poster || (hosted ? "" : highlightThumbnailFromUrl(href)),
+          thumbUnoptimized:
+            hosted ||
+            Boolean(poster.startsWith("data:") || poster.startsWith("/api/media/") || poster.startsWith("/uploads/")),
         };
       }),
     [content.highlights.items],

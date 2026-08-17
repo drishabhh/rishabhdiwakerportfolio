@@ -136,8 +136,8 @@ type HighlightedEditsGalleryProps = {
 };
 
 function posterFor(item: HighlightEditItem): string {
-  if (item.posterUrl) return item.posterUrl;
-  if (item.thumbnail) return item.thumbnail;
+  if (item.posterUrl) return mediaSrcFromBlob(item.posterUrl);
+  if (item.thumbnail) return mediaSrcFromBlob(item.thumbnail) || item.thumbnail;
   const yt = youtubeVideoIdFromUrl(item.href ?? "");
   if (yt) return `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`;
   return vimeoThumbnailFromUrl(item.href ?? "");
@@ -783,7 +783,11 @@ function HighlightCard({
               alt={item.title || "Highlight"}
               fill
               sizes="220px"
-              unoptimized={item.thumbUnoptimized}
+              unoptimized={
+                item.thumbUnoptimized ||
+                poster.startsWith("/api/media/") ||
+                poster.startsWith("data:")
+              }
               // Slow Ken Burns drift on hover/focus — signals motion-design
               // intent without re-introducing autoplay. Long duration reads
               // as deliberate, not jumpy.

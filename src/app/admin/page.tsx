@@ -14,6 +14,7 @@ import { HighlightFramePicker } from "@/components/admin/highlight-frame-picker"
 import { insertHighlightAtTop, moveHighlightToOrder, sortedHighlights } from "@/lib/highlight-order";
 import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
+import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
 import { normalizeYouTubeHref, youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
@@ -59,7 +60,11 @@ function HighlightVideoThumb({
   posterUrl?: string;
   className?: string;
 }) {
-  const thumb = posterUrl || (fileUrl ? "" : highlightThumbnailFromUrl(href));
+  const thumb = posterUrl?.trim()
+    ? mediaSrcFromBlob(posterUrl)
+    : fileUrl
+      ? ""
+      : highlightThumbnailFromUrl(href);
   const youtubeId = youtubeVideoIdFromUrl(href);
   const vimeo = vimeoFromUrl(href);
   const hosted = Boolean(fileUrl?.trim());
@@ -262,6 +267,7 @@ export default function AdminPage() {
   const [resumeError, setResumeError] = useState("");
   const [uploadingHighlightIndex, setUploadingHighlightIndex] = useState<number | null>(null);
   const [highlightUploadPercent, setHighlightUploadPercent] = useState(0);
+  const [uploadingPosterIndex, setUploadingPosterIndex] = useState<number | null>(null);
   const highlightFileInputRef = useRef<HTMLInputElement>(null);
   const [highlightUploadTarget, setHighlightUploadTarget] = useState<number | null>(null);
 
@@ -416,6 +422,25 @@ export default function AdminPage() {
     } finally {
       setUploadingHighlightIndex(null);
       setHighlightUploadPercent(0);
+    }
+  };
+
+  const uploadHighlightPoster = async (index: number, file: File) => {
+    setUploadingPosterIndex(index);
+    setMessage("Uploading thumbnail…");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/admin/highlight-poster", { method: "POST", body: formData });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error || "Thumbnail upload failed");
+      updateHighlight(index, { posterUrl: data.url });
+      setMessage("Thumbnail uploaded! Click Save to publish it on the site.");
+      setTimeout(() => setMessage(""), 5000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Thumbnail upload failed");
+    } finally {
+      setUploadingPosterIndex(null);
     }
   };
 
@@ -924,13 +949,15 @@ export default function AdminPage() {
                     href={item.href}
                     fileUrl={item.fileUrl}
                     selectedUrl={item.posterUrl}
+                    uploading={uploadingPosterIndex === i}
                     onSelect={(url) => updateHighlight(i, { posterUrl: url })}
+                    onUpload={(file) => void uploadHighlightPoster(i, file)}
                   />
                   <Field
                     label="Poster image URL (optional override)"
                     value={item.posterUrl || ""}
                     onChange={(v) => updateHighlight(i, { posterUrl: v })}
-                    hint="Filled when you pick a frame. You can also paste a custom image URL."
+                    hint="Filled when you upload a thumbnail or pick a frame."
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Views / metric" value={item.views} onChange={(v) => updateHighlight(i, { views: v })} />
