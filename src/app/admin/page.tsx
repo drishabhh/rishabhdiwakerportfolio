@@ -11,6 +11,7 @@ import type {
   VaultPlaylist,
 } from "@/lib/content-types";
 import { originalHighlightItems } from "@/lib/original-highlights";
+import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
 import { normalizeYouTubeHref, youtubeThumbnailFromUrl, youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -363,7 +364,7 @@ export default function AdminPage() {
 
     setUploadingHighlightIndex(index);
     setHighlightUploadPercent(0);
-    setMessage("");
+    setMessage("Starting upload…");
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
     const contentType =
@@ -374,49 +375,36 @@ export default function AdminPage() {
           : ext === "mov"
             ? "video/quicktime"
             : "video/mp4";
+    const pathname = `portfolio/highlights/${Date.now()}.${ext}`;
 
     try {
-      const { upload } = await import("@vercel/blob/client");
-      const blob = await upload(`portfolio/highlights/${Date.now()}.${ext}`, file, {
-        access: "public",
-        contentType,
-        multipart: true,
-        handleUploadUrl: "/api/admin/highlight-video",
-        onUploadProgress: ({ percentage }) => {
-          setHighlightUploadPercent(Math.max(0, Math.min(100, Math.round(percentage))));
-        },
-      });
-
-      updateHighlight(index, { fileUrl: blob.url });
+      const clientToken = await requestHighlightUploadToken(pathname, contentType, file.size);
+      setMessage("Uploading to storage…");
+      const url = await xhrPutHighlightToBlob(pathname, file, contentType, clientToken, setHighlightUploadPercent);
+      updateHighlight(index, { fileUrl: url });
       setMessage("Video uploaded! Click Save to publish it on the site.");
       setTimeout(() => setMessage(""), 5000);
-    } catch (blobError) {
+    } catch (error) {
       const isLocal = window.location.hostname === "localhost";
       const smallEnoughForServer = file.size <= 4 * 1024 * 1024;
-
-      if (!isLocal && !smallEnoughForServer) {
-        const detail = blobError instanceof Error ? blobError.message : "Blob upload failed";
-        setMessage(
-          `Upload stalled: ${detail}. On production, videos go straight to Vercel Blob — confirm BLOB_READ_WRITE_TOKEN is set.`,
-        );
-        return;
-      }
-
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/admin/highlight-video", { method: "POST", body: formData });
-        const data = (await res.json()) as { url?: string; error?: string };
-        if (!res.ok || !data.url) {
-          throw new Error(data.error || "Upload failed");
+      if (isLocal && smallEnoughForServer) {
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          const res = await fetch("/api/admin/highlight-video", { method: "POST", body: formData });
+          const data = (await res.json()) as { url?: string; error?: string };
+          if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+          updateHighlight(index, { fileUrl: data.url });
+          setHighlightUploadPercent(100);
+          setMessage("Video uploaded! Click Save to publish it on the site.");
+          setTimeout(() => setMessage(""), 5000);
+          return;
+        } catch (fallbackError) {
+          setMessage(fallbackError instanceof Error ? fallbackError.message : "Video upload failed");
+          return;
         }
-        updateHighlight(index, { fileUrl: data.url });
-        setHighlightUploadPercent(100);
-        setMessage("Video uploaded! Click Save to publish it on the site.");
-        setTimeout(() => setMessage(""), 5000);
-      } catch (fallbackError) {
-        setMessage(fallbackError instanceof Error ? fallbackError.message : "Video upload failed");
       }
+      setMessage(error instanceof Error ? error.message : "Video upload failed");
     } finally {
       setUploadingHighlightIndex(null);
       setHighlightUploadPercent(0);
