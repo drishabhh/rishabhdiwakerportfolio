@@ -256,6 +256,7 @@ export default function AdminPage() {
   const [uploadingResume, setUploadingResume] = useState(false);
   const [resumeError, setResumeError] = useState("");
   const [uploadingHighlightIndex, setUploadingHighlightIndex] = useState<number | null>(null);
+  const [highlightUploadPercent, setHighlightUploadPercent] = useState(0);
   const highlightFileInputRef = useRef<HTMLInputElement>(null);
   const [highlightUploadTarget, setHighlightUploadTarget] = useState<number | null>(null);
 
@@ -354,39 +355,71 @@ export default function AdminPage() {
   };
 
   const uploadHighlightVideo = async (index: number, file: File) => {
+    const maxBytes = 100 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setMessage("Video must be 100 MB or smaller. Compress it and try again.");
+      return;
+    }
+
     setUploadingHighlightIndex(index);
+    setHighlightUploadPercent(0);
     setMessage("");
 
+    const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+    const contentType =
+      file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : ext === "webm"
+          ? "video/webm"
+          : ext === "mov"
+            ? "video/quicktime"
+            : "video/mp4";
+
     try {
-      let url: string | undefined;
+      const { upload } = await import("@vercel/blob/client");
+      const blob = await upload(`portfolio/highlights/${Date.now()}.${ext}`, file, {
+        access: "public",
+        contentType,
+        multipart: true,
+        handleUploadUrl: "/api/admin/highlight-video",
+        onUploadProgress: ({ percentage }) => {
+          setHighlightUploadPercent(Math.max(0, Math.min(100, Math.round(percentage))));
+        },
+      });
+
+      updateHighlight(index, { fileUrl: blob.url });
+      setMessage("Video uploaded! Click Save to publish it on the site.");
+      setTimeout(() => setMessage(""), 5000);
+    } catch (blobError) {
+      const isLocal = window.location.hostname === "localhost";
+      const smallEnoughForServer = file.size <= 4 * 1024 * 1024;
+
+      if (!isLocal && !smallEnoughForServer) {
+        const detail = blobError instanceof Error ? blobError.message : "Blob upload failed";
+        setMessage(
+          `Upload stalled: ${detail}. On production, videos go straight to Vercel Blob — confirm BLOB_READ_WRITE_TOKEN is set.`,
+        );
+        return;
+      }
 
       try {
-        const { upload } = await import("@vercel/blob/client");
-        const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
-        const blob = await upload(`portfolio/highlights/${Date.now()}.${ext}`, file, {
-          access: "public",
-          handleUploadUrl: "/api/admin/highlight-video",
-        });
-        url = blob.url;
-      } catch {
         const formData = new FormData();
         formData.append("file", file);
         const res = await fetch("/api/admin/highlight-video", { method: "POST", body: formData });
-        if (!res.ok) {
-          const data = (await res.json()) as { error?: string };
+        const data = (await res.json()) as { url?: string; error?: string };
+        if (!res.ok || !data.url) {
           throw new Error(data.error || "Upload failed");
         }
-        const data = (await res.json()) as { url: string };
-        url = data.url;
+        updateHighlight(index, { fileUrl: data.url });
+        setHighlightUploadPercent(100);
+        setMessage("Video uploaded! Click Save to publish it on the site.");
+        setTimeout(() => setMessage(""), 5000);
+      } catch (fallbackError) {
+        setMessage(fallbackError instanceof Error ? fallbackError.message : "Video upload failed");
       }
-
-      updateHighlight(index, { fileUrl: url });
-      setMessage("Video uploaded! Click Save to publish it on the site.");
-      setTimeout(() => setMessage(""), 5000);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Video upload failed");
     } finally {
       setUploadingHighlightIndex(null);
+      setHighlightUploadPercent(0);
     }
   };
 
@@ -808,7 +841,9 @@ export default function AdminPage() {
                           }}
                           className="rounded-md border border-emerald-700/60 px-2.5 py-1 text-xs text-emerald-200 hover:bg-emerald-950/40 disabled:opacity-50"
                         >
-                          {uploadingHighlightIndex === i ? "Uploading…" : "Replace file"}
+                          {uploadingHighlightIndex === i
+                            ? `Uploading ${highlightUploadPercent}%…`
+                            : "Replace file"}
                         </button>
                         <button
                           type="button"
@@ -833,7 +868,9 @@ export default function AdminPage() {
                         }}
                         className="mt-2 rounded-lg border border-orange-700/60 bg-orange-950/30 px-3 py-2 text-xs text-orange-200 hover:bg-orange-950/50 disabled:opacity-50"
                       >
-                        {uploadingHighlightIndex === i ? "Uploading…" : "Upload video file"}
+                        {uploadingHighlightIndex === i
+                          ? `Uploading ${highlightUploadPercent}%…`
+                          : "Upload video file"}
                       </button>
                     </div>
                   )}
