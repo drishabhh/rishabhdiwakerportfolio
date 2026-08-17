@@ -10,6 +10,8 @@ import type {
   SkillBlock,
   VaultPlaylist,
 } from "@/lib/content-types";
+import { HighlightFramePicker } from "@/components/admin/highlight-frame-picker";
+import { insertHighlightAtTop, moveHighlightToOrder, sortedHighlights } from "@/lib/highlight-order";
 import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
 import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
@@ -269,7 +271,11 @@ export default function AdminPage() {
     setAuthenticated(data.authenticated);
     if (data.authenticated) {
       const contentRes = await fetch("/api/content");
-      setContent(await contentRes.json());
+      const loaded = (await contentRes.json()) as SiteContent;
+      if (loaded.highlights?.items) {
+        loaded.highlights.items = sortedHighlights(loaded.highlights.items);
+      }
+      setContent(loaded);
     }
   }, []);
 
@@ -286,7 +292,7 @@ export default function AdminPage() {
     const payload: SiteContent = {
       ...content,
       highlights: {
-        items: content.highlights.items.map((item) => ({
+        items: sortedHighlights(content.highlights.items).map((item) => ({
           ...item,
           href: normalizeYouTubeHref(item.href),
         })),
@@ -433,6 +439,18 @@ export default function AdminPage() {
     );
   }
 
+  const setHighlightOrder = (index: number, raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) return;
+    setContent((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        highlights: { items: moveHighlightToOrder(c.highlights.items, index, parsed) },
+      };
+    });
+  };
+
   const updateHighlight = (index: number, patch: Partial<HighlightItem>) => {
     setContent((c) => {
       if (!c) return c;
@@ -451,7 +469,7 @@ export default function AdminPage() {
       if (!removed) return c;
       return {
         ...c,
-        highlights: { items: c.highlights.items.filter((_, j) => j !== index) },
+        highlights: { items: sortedHighlights(c.highlights.items.filter((_, j) => j !== index)) },
         trash: {
           highlights: [...(c.trash?.highlights ?? []), removed],
         },
@@ -466,7 +484,7 @@ export default function AdminPage() {
       if (!item) return c;
       return {
         ...c,
-        highlights: { items: [...c.highlights.items, item] },
+        highlights: { items: sortedHighlights([...c.highlights.items, item]) },
         trash: {
           highlights: (c.trash?.highlights ?? []).filter((_, j) => j !== index),
         },
@@ -496,7 +514,7 @@ export default function AdminPage() {
       );
       return {
         ...c,
-        highlights: { items: originals.map((item) => ({ ...item })) },
+        highlights: { items: originals.map((entry, index) => ({ ...entry, order: index + 1 })) },
         trash: {
           highlights: [...(c.trash?.highlights ?? []), ...removed],
         },
@@ -513,7 +531,7 @@ export default function AdminPage() {
       if (bin.length === 0) return c;
       return {
         ...c,
-        highlights: { items: [...c.highlights.items, ...bin] },
+        highlights: { items: sortedHighlights([...c.highlights.items, ...bin]) },
         trash: { highlights: [] },
       };
     });
@@ -742,10 +760,14 @@ export default function AdminPage() {
                       setContent({
                         ...content,
                         highlights: {
-                          items: [
-                            { title: "New highlight", views: "0", caption: "", href: "", badge: "" },
-                            ...content.highlights.items,
-                          ],
+                          items: insertHighlightAtTop(content.highlights.items, {
+                            title: "New highlight",
+                            views: "0",
+                            caption: "",
+                            href: "",
+                            badge: "",
+                            order: 1,
+                          }),
                         },
                       })
                     }
@@ -787,7 +809,9 @@ export default function AdminPage() {
                         posterUrl={item.posterUrl}
                       />
                       <div className="min-w-0 pt-0.5">
-                        <p className="text-sm font-medium text-zinc-300">Video {i + 1}</p>
+                        <p className="text-sm font-medium text-zinc-300">
+                          Video {item.order ?? i + 1}
+                        </p>
                         {item.title ? (
                           <p className="truncate text-xs text-zinc-500">{item.title}</p>
                         ) : (
@@ -806,6 +830,19 @@ export default function AdminPage() {
                     </button>
                   </div>
                   <Field label="Title" value={item.title} onChange={(v) => updateHighlight(i, { title: v })} />
+                  <label className="block max-w-[8rem]">
+                    <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">Order</span>
+                    <p className="mt-0.5 text-xs text-zinc-500">1 is first. Same number shifts the others.</p>
+                    <input
+                      type="number"
+                      min={1}
+                      max={content.highlights.items.length}
+                      key={`order-${i}-${item.order ?? i + 1}`}
+                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-base text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50 sm:text-sm"
+                      defaultValue={item.order ?? i + 1}
+                      onBlur={(e) => setHighlightOrder(i, e.target.value)}
+                    />
+                  </label>
                   <Field
                     label="YouTube or Vimeo URL"
                     value={item.href}
@@ -883,11 +920,17 @@ export default function AdminPage() {
                   ) : item.fileUrl?.trim() ? (
                     <p className="text-xs text-emerald-400">Hosted file will play in the gallery.</p>
                   ) : null}
+                  <HighlightFramePicker
+                    href={item.href}
+                    fileUrl={item.fileUrl}
+                    selectedUrl={item.posterUrl}
+                    onSelect={(url) => updateHighlight(i, { posterUrl: url })}
+                  />
                   <Field
-                    label="Poster image URL (optional)"
+                    label="Poster image URL (optional override)"
                     value={item.posterUrl || ""}
                     onChange={(v) => updateHighlight(i, { posterUrl: v })}
-                    hint="Custom thumbnail for hosted videos — leave blank to use the video's first frame area"
+                    hint="Filled when you pick a frame. You can also paste a custom image URL."
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Views / metric" value={item.views} onChange={(v) => updateHighlight(i, { views: v })} />

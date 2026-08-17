@@ -8,6 +8,8 @@ export type HighlightItem = {
   fileUrl?: string;
   /** Optional custom poster; falls back to YouTube thumb or first frame */
   posterUrl?: string;
+  /** 1-based gallery position; unique, shifts when another item takes the same slot */
+  order?: number;
 };
 
 export type SkillBlock = {

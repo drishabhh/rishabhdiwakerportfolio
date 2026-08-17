@@ -13,6 +13,7 @@ import {
   writeGitHubText,
 } from "./github-content";
 import { originalHighlightItems } from "./original-highlights";
+import { sortedHighlights } from "./highlight-order";
 
 export type {
   ExperienceRole,
@@ -303,7 +304,7 @@ export function mergeContent(partial: Partial<SiteContent>): SiteContent {
     },
     summary: { ...defaultContent.summary, ...partial.summary },
     highlights: {
-      items: partial.highlights?.items ?? defaultContent.highlights.items,
+      items: sortedHighlights(partial.highlights?.items ?? defaultContent.highlights.items),
     },
     trash: {
       highlights: partial.trash?.highlights ?? defaultContent.trash?.highlights ?? [],

@@ -18,6 +18,7 @@ import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { smoothScrollToY } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref } from "@/lib/youtube";
+import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
@@ -227,14 +228,14 @@ export default function HomeClient({ content }: HomeClientProps) {
 
   const highlightedEdits: HighlightEditItem[] = useMemo(
     () =>
-      content.highlights.items.map((item) => {
+      sortedHighlights(content.highlights.items).map((item) => {
         const href = normalizeYouTubeHref(item.href);
         const hosted = Boolean(item.fileUrl?.trim());
         return {
           ...item,
           href,
           thumbnail: item.posterUrl || (hosted ? "" : highlightThumbnailFromUrl(href)),
-          thumbUnoptimized: hosted || Boolean(item.posterUrl),
+          thumbUnoptimized: hosted || Boolean(item.posterUrl?.startsWith("data:")),
         };
       }),
     [content.highlights.items],
