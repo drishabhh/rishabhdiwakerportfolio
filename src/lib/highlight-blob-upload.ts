@@ -1,4 +1,5 @@
-const BLOB_API = "https://vercel.com/api/blob";
+/** Same-origin proxy (see next.config rewrites). Avoids Safari/ad-blockers blocking vercel.com. */
+const BLOB_API = "/api/admin/highlight-blob";
 
 function storeIdFromClientToken(token: string): string {
   const [, , , storeId = ""] = token.split("_");
@@ -86,7 +87,7 @@ export function xhrPutHighlightToBlob(
     xhr.onerror = () => {
       reject(
         new Error(
-          "Browser blocked the upload to vercel.com (ad blocker or privacy extension). Pause it for this site and retry.",
+          "Upload did not go through. Paste a Vimeo URL instead, or retry on Wi-Fi with a smaller file (under 100 MB).",
         ),
       );
     };

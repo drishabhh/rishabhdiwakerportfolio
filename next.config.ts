@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/admin/highlight-blob",
+        destination: "https://vercel.com/api/blob",
+      },
+    ];
+  },
   async headers() {
     return [
       {
