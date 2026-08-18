@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, 
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { vimeoEmbedSrc, vimeoFromUrl, vimeoThumbnailFromUrl } from "@/lib/vimeo";
 import { mediaSrcFromBlob } from "@/lib/blob-media";
+import { customHighlightPoster } from "@/lib/highlight-frames";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -136,8 +137,11 @@ type HighlightedEditsGalleryProps = {
 };
 
 function posterFor(item: HighlightEditItem): string {
-  if (item.posterUrl) return mediaSrcFromBlob(item.posterUrl);
-  if (item.thumbnail) return mediaSrcFromBlob(item.thumbnail) || item.thumbnail;
+  const custom = customHighlightPoster(item.posterUrl);
+  if (custom) return custom;
+  if (item.thumbnail && !item.thumbnail.startsWith("data:image/")) {
+    return mediaSrcFromBlob(item.thumbnail) || item.thumbnail;
+  }
   const yt = youtubeVideoIdFromUrl(item.href ?? "");
   if (yt) return `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`;
   return vimeoThumbnailFromUrl(item.href ?? "");
@@ -186,6 +190,7 @@ function HighlightCard({
   onToggleMute,
 }: CardProps) {
   const poster = posterFor(item);
+  const [posterSrc, setPosterSrc] = useState(poster);
   const fileUrl = mediaSrcFromBlob(item.fileUrl?.trim() ?? "");
   const useHosted = Boolean(fileUrl);
   const youtubeId = useHosted ? "" : youtubeVideoIdFromUrl(item.href ?? "");
@@ -218,6 +223,10 @@ function HighlightCard({
     if (vimeoRef) return vimeoEmbedSrc(vimeoRef, true);
     return null;
   }, [iframeMounted, youtubeId, vimeoRef]);
+
+  useEffect(() => {
+    setPosterSrc(poster);
+  }, [poster]);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -671,7 +680,7 @@ function HighlightCard({
             <video
               ref={videoRef}
               src={fileUrl}
-              poster={poster || undefined}
+              poster={posterSrc || undefined}
               title={item.title || "Highlight video"}
               className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover"
               playsInline
@@ -777,20 +786,22 @@ function HighlightCard({
           className={`absolute inset-0 h-full w-full ${playable ? "cursor-pointer" : ""}`}
           aria-label={playable ? (item.title ? `Play ${item.title}` : "Play video") : undefined}
         >
-          {poster ? (
+          {posterSrc ? (
             <Image
-              src={poster}
+              src={posterSrc}
               alt={item.title || "Highlight"}
               fill
               sizes="220px"
               unoptimized={
                 item.thumbUnoptimized ||
-                poster.startsWith("/api/media/") ||
-                poster.startsWith("data:")
+                posterSrc.startsWith("/api/media/") ||
+                posterSrc.startsWith("data:")
               }
-              // Slow Ken Burns drift on hover/focus — signals motion-design
-              // intent without re-introducing autoplay. Long duration reads
-              // as deliberate, not jumpy.
+              onError={() => {
+                const id = youtubeVideoIdFromUrl(item.href ?? "");
+                const fallback = id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+                if (fallback && posterSrc !== fallback) setPosterSrc(fallback);
+              }}
               className="object-cover transition-transform duration-[6000ms] ease-out group-hover:scale-110 group-focus-visible:scale-110"
             />
           ) : (

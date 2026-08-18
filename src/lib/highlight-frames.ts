@@ -1,10 +1,18 @@
-import { youtubeVideoIdFromUrl } from "@/lib/youtube";
+import { youtubeThumbnailFromUrl, isYouTubeAutoFrameUrl } from "@/lib/youtube";
 import { vimeoFromUrl, vimeoThumbnailFromUrl } from "@/lib/vimeo";
+import { mediaSrcFromBlob } from "@/lib/blob-media";
+
+/** Custom upload only — ignore auto YouTube frames and canvas captures. */
+export function customHighlightPoster(posterUrl?: string): string {
+  const raw = posterUrl?.trim() ?? "";
+  if (!raw) return "";
+  if (isYouTubeAutoFrameUrl(raw) || raw.startsWith("data:image/")) return "";
+  return mediaSrcFromBlob(raw);
+}
 
 export function youtubeFrameUrls(href: string): string[] {
-  const id = youtubeVideoIdFromUrl(href);
-  if (!id) return [];
-  return [1, 2, 3].map((n) => `https://i.ytimg.com/vi/${id}/${n}.jpg`);
+  const official = youtubeThumbnailFromUrl(href);
+  return official ? [official] : [];
 }
 
 export function vimeoFrameUrls(href: string): string[] {

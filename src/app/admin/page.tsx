@@ -11,10 +11,10 @@ import type {
   VaultPlaylist,
 } from "@/lib/content-types";
 import { HighlightFramePicker } from "@/components/admin/highlight-frame-picker";
+import { customHighlightPoster } from "@/lib/highlight-frames";
 import { insertHighlightAtTop, moveHighlightToOrder, sortedHighlights } from "@/lib/highlight-order";
 import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
-import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
 import { normalizeYouTubeHref, youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
@@ -60,11 +60,8 @@ function HighlightVideoThumb({
   posterUrl?: string;
   className?: string;
 }) {
-  const thumb = posterUrl?.trim()
-    ? mediaSrcFromBlob(posterUrl)
-    : fileUrl
-      ? ""
-      : highlightThumbnailFromUrl(href);
+  const thumb =
+    customHighlightPoster(posterUrl) || highlightThumbnailFromUrl(href);
   const youtubeId = youtubeVideoIdFromUrl(href);
   const vimeo = vimeoFromUrl(href);
   const hosted = Boolean(fileUrl?.trim());

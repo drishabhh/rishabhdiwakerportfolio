@@ -49,5 +49,10 @@ export function youtubeVideoIdFromUrl(url: string): string | null {
 
 export function youtubeThumbnailFromUrl(url: string): string {
   const id = youtubeVideoIdFromUrl(url);
-  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "";
+  return id ? `https://i.ytimg.com/vi/${id}/maxresdefault.jpg` : "";
+}
+
+/** Auto-generated YouTube stills (not the official video thumbnail). */
+export function isYouTubeAutoFrameUrl(url: string): boolean {
+  return /i\.ytimg\.com\/vi\/[\w-]{11}\/[123]\.jpg(?:\?|$)/i.test(url);
 }

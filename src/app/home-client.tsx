@@ -20,7 +20,7 @@ import { smoothScrollToY } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref } from "@/lib/youtube";
 import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
-import { mediaSrcFromBlob } from "@/lib/blob-media";
+import { customHighlightPoster } from "@/lib/highlight-frames";
 import { motion, useReducedMotion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
@@ -232,11 +232,11 @@ export default function HomeClient({ content }: HomeClientProps) {
       sortedHighlights(content.highlights.items).map((item) => {
         const href = normalizeYouTubeHref(item.href);
         const hosted = Boolean(item.fileUrl?.trim());
-        const poster = item.posterUrl?.trim() ? mediaSrcFromBlob(item.posterUrl) : "";
+        const poster = customHighlightPoster(item.posterUrl);
         return {
           ...item,
           href,
-          thumbnail: poster || (hosted ? "" : highlightThumbnailFromUrl(href)),
+          thumbnail: poster || highlightThumbnailFromUrl(href),
           thumbUnoptimized:
             hosted ||
             Boolean(poster.startsWith("data:") || poster.startsWith("/api/media/") || poster.startsWith("/uploads/")),
