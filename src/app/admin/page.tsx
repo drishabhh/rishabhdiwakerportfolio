@@ -10,6 +10,7 @@ import type {
   SkillBlock,
   VaultPlaylist,
 } from "@/lib/content-types";
+import { isEnabled } from "@/lib/content-types";
 import { HighlightFramePicker } from "@/components/admin/highlight-frame-picker";
 import { customHighlightPoster } from "@/lib/highlight-frames";
 import { insertHighlightAtTop, moveHighlightToOrder, sortedHighlights } from "@/lib/highlight-order";
@@ -17,7 +18,7 @@ import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
 import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
 import { normalizeYouTubeHref, youtubeVideoIdFromUrl } from "@/lib/youtube";
-import { LogOut, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
+import { LogOut, Pencil, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type SectionId =
@@ -138,6 +139,60 @@ function Field({
         />
       )}
     </label>
+  );
+}
+
+function EnabledToggle({
+  on,
+  onChange,
+  name,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  name: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`${on ? "Turn off" : "Turn on"} ${name}`}
+      onClick={() => onChange(!on)}
+      className={`inline-flex items-center justify-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-semibold ${
+        on
+          ? "border-emerald-800/70 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/70"
+          : "border-zinc-700 bg-zinc-950/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+      }`}
+    >
+      <span className={`relative h-4 w-7 shrink-0 rounded-full ${on ? "bg-emerald-500" : "bg-zinc-600"}`} aria-hidden>
+        <span
+          className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-[left] ${on ? "left-3.5" : "left-0.5"}`}
+        />
+      </span>
+      {on ? "On" : "Off"}
+    </button>
+  );
+}
+
+function SectionVisibility({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-zinc-200">Show this section on the site</p>
+        <p className={`text-xs ${on ? "text-emerald-400" : "text-zinc-500"}`}>
+          {on ? `${label} is visible` : `${label} is hidden`}
+        </p>
+      </div>
+      <EnabledToggle on={on} onChange={onChange} name={label} />
+    </div>
   );
 }
 
@@ -267,6 +322,7 @@ export default function AdminPage() {
   const [uploadingPosterIndex, setUploadingPosterIndex] = useState<number | null>(null);
   const highlightFileInputRef = useRef<HTMLInputElement>(null);
   const [highlightUploadTarget, setHighlightUploadTarget] = useState<number | null>(null);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
 
   const loadSession = useCallback(async () => {
     const res = await fetch("/api/admin/session");
@@ -295,6 +351,7 @@ export default function AdminPage() {
     const payload: SiteContent = {
       ...content,
       highlights: {
+        ...content.highlights,
         items: sortedHighlights(content.highlights.items).map((item) => ({
           ...item,
           href: normalizeYouTubeHref(item.href),
@@ -360,7 +417,9 @@ export default function AdminPage() {
     }
     const data = (await res.json()) as { url: string; downloadName: string };
     setContent((c) =>
-      c ? { ...c, resume: { url: data.url, downloadName: data.downloadName } } : c,
+      c
+        ? { ...c, resume: { url: data.url, downloadName: data.downloadName, enabled: c.resume?.enabled } }
+        : c,
     );
     setMessage("Resume uploaded! The download button on the site is updated.");
     setTimeout(() => setMessage(""), 4000);
@@ -568,6 +627,52 @@ export default function AdminPage() {
     });
   };
 
+  const addRole = () => {
+    const id = `role-${Date.now()}`;
+    setContent((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        experience: {
+          ...c.experience,
+          roles: [
+            ...c.experience.roles,
+            {
+              id,
+              company: "New company",
+              dateRange: "",
+              role: "",
+              tagline: "",
+              videoUrl: "",
+              enabled: true,
+            },
+          ],
+        },
+      };
+    });
+    setEditingRoleId(id);
+  };
+
+  const deleteRole = (index: number) => {
+    if (!content) return;
+    const removed = content.experience.roles[index];
+    if (!removed) return;
+    if (!window.confirm(`Delete “${removed.company || "this experience card"}”? Click Save changes to publish.`)) {
+      return;
+    }
+    setEditingRoleId((id) => (id === removed.id ? null : id));
+    setContent((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        experience: {
+          ...c.experience,
+          roles: c.experience.roles.filter((_, j) => j !== index),
+        },
+      };
+    });
+  };
+
   const updatePlaylist = (index: number, patch: Partial<VaultPlaylist>) => {
     setContent((c) => {
       if (!c) return c;
@@ -683,6 +788,11 @@ export default function AdminPage() {
           {activeSection === "header" && (
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Header</h2>
+              <SectionVisibility
+                label="Header"
+                on={isEnabled(content.header.enabled)}
+                onChange={(enabled) => setContent({ ...content, header: { ...content.header, enabled } })}
+              />
               <Field label="Name" value={content.header.name} onChange={(v) => setContent({ ...content, header: { ...content.header, name: v } })} />
               <Field
                 label="Tagline"
@@ -709,6 +819,11 @@ export default function AdminPage() {
           {activeSection === "hero" && (
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Hero tagline</h2>
+              <SectionVisibility
+                label="Hero"
+                on={isEnabled(content.hero.enabled)}
+                onChange={(enabled) => setContent({ ...content, hero: { ...content.hero, enabled } })}
+              />
               <Field label="Prefix" value={content.hero.linePrefix} onChange={(v) => setContent({ ...content, hero: { ...content.hero, linePrefix: v } })} />
               <CommaSeparatedField
                 label="Rotating words (comma-separated)"
@@ -761,6 +876,11 @@ export default function AdminPage() {
           {activeSection === "summary" && (
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Summary</h2>
+              <SectionVisibility
+                label="Summary"
+                on={isEnabled(content.summary.enabled)}
+                onChange={(enabled) => setContent({ ...content, summary: { ...content.summary, enabled } })}
+              />
               <Field label="Section title" value={content.summary.title} onChange={(v) => setContent({ ...content, summary: { ...content.summary, title: v } })} />
               <Field label="Professional profile" value={content.summary.professionalProfile} onChange={(v) => setContent({ ...content, summary: { ...content.summary, professionalProfile: v } })} multiline />
               <Field label="Core philosophy" value={content.summary.corePhilosophy} onChange={(v) => setContent({ ...content, summary: { ...content.summary, corePhilosophy: v } })} multiline />
@@ -771,6 +891,11 @@ export default function AdminPage() {
             <section className="space-y-4">
               <div className="flex flex-col gap-3">
                 <h2 className="text-base font-semibold sm:text-lg">Highlighted edits</h2>
+                <SectionVisibility
+                  label="Highlights"
+                  on={isEnabled(content.highlights.enabled)}
+                  onChange={(enabled) => setContent({ ...content, highlights: { ...content.highlights, enabled } })}
+                />
                 <p className="text-sm text-zinc-400">
                   Paste a YouTube or Vimeo link. If YouTube blocks embedding, upload the same cut to Vimeo and paste
                   that URL here — it plays in the gallery without a file upload.
@@ -789,6 +914,7 @@ export default function AdminPage() {
                             href: "",
                             badge: "",
                             order: 1,
+                            enabled: true,
                           }),
                         },
                       })
@@ -821,8 +947,10 @@ export default function AdminPage() {
                 }}
               />
 
-              {content.highlights.items.map((item, i) => (
-                <div key={`${item.href}-${i}`} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
+              {content.highlights.items.map((item, i) => {
+                const itemOn = isEnabled(item.enabled);
+                return (
+                <div key={`${item.href}-${i}`} className={`space-y-3 rounded-xl border bg-zinc-900/50 p-4 sm:p-5 ${itemOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <HighlightVideoThumb
@@ -839,17 +967,27 @@ export default function AdminPage() {
                         ) : (
                           <p className="text-xs text-zinc-600">No title yet</p>
                         )}
+                        <p className={`mt-1 text-[11px] font-medium ${itemOn ? "text-emerald-400" : "text-zinc-500"}`}>
+                          {itemOn ? "On — visible on site" : "Off — hidden on site"}
+                        </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => deleteHighlight(i)}
-                      className="inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
-                      title="Move to trash"
-                    >
-                      <Trash2 size={16} />
-                      <span className="hidden sm:inline">Move to trash</span>
-                    </button>
+                    <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                      <EnabledToggle
+                        on={itemOn}
+                        onChange={(enabled) => updateHighlight(i, { enabled })}
+                        name={item.title || `video ${i + 1}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => deleteHighlight(i)}
+                        className="inline-flex shrink-0 items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
+                        title="Move to trash"
+                      >
+                        <Trash2 size={16} />
+                        <span className="hidden sm:inline">Move to trash</span>
+                      </button>
+                    </div>
                   </div>
                   <Field label="Title" value={item.title} onChange={(v) => updateHighlight(i, { title: v })} />
                   <label className="block max-w-[8rem]">
@@ -962,7 +1100,8 @@ export default function AdminPage() {
                   </div>
                   <Field label="Caption" value={item.caption || ""} onChange={(v) => updateHighlight(i, { caption: v })} />
                 </div>
-              ))}
+                );
+              })}
 
               {trashHighlights.length > 0 ? (
                 <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-4 sm:p-5">
@@ -1026,10 +1165,25 @@ export default function AdminPage() {
           {activeSection === "skills" && (
             <section className="space-y-4">
               <h2 className="text-lg font-semibold">Skills</h2>
+              <SectionVisibility
+                label="Skills"
+                on={isEnabled(content.skills.enabled)}
+                onChange={(enabled) => setContent({ ...content, skills: { ...content.skills, enabled } })}
+              />
               <Field label="Section title" value={content.skills.title} onChange={(v) => setContent({ ...content, skills: { ...content.skills, title: v } })} />
               <Field label="Subtitle" value={content.skills.subtitle} onChange={(v) => setContent({ ...content, skills: { ...content.skills, subtitle: v } })} multiline />
-              {content.skills.blocks.map((block, i) => (
-                <div key={block.num} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
+              {content.skills.blocks.map((block, i) => {
+                const blockOn = isEnabled(block.enabled);
+                return (
+                <div key={block.num} className={`space-y-3 rounded-xl border bg-zinc-900/50 p-4 sm:p-5 ${blockOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-zinc-300">{block.title || `Block ${i + 1}`}</span>
+                    <EnabledToggle
+                      on={blockOn}
+                      onChange={(enabled) => updateSkillBlock(i, { enabled })}
+                      name={block.title || `skill block ${i + 1}`}
+                    />
+                  </div>
                   <Field label="Block number" value={block.num} onChange={(v) => updateSkillBlock(i, { num: v })} />
                   <Field label="Title" value={block.title} onChange={(v) => updateSkillBlock(i, { title: v })} />
                   <CommaSeparatedField
@@ -1038,68 +1192,197 @@ export default function AdminPage() {
                     onChange={(tags) => updateSkillBlock(i, { tags })}
                   />
                 </div>
-              ))}
+                );
+              })}
             </section>
           )}
 
           {activeSection === "vault" && (
             <section className="space-y-4">
               <h2 className="text-lg font-semibold">Production vault / Archive</h2>
+              <SectionVisibility
+                label="Archive / Vault"
+                on={isEnabled(content.vault.enabled)}
+                onChange={(enabled) => setContent({ ...content, vault: { ...content.vault, enabled } })}
+              />
               <Field label="Title" value={content.vault.title} onChange={(v) => setContent({ ...content, vault: { ...content.vault, title: v } })} />
               <Field label="Subtitle" value={content.vault.subtitle} onChange={(v) => setContent({ ...content, vault: { ...content.vault, subtitle: v } })} />
-              {content.vault.playlists.map((pl, i) => (
-                <div key={pl.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
-                  <span className="text-sm font-medium text-zinc-300">Playlist {i + 1}</span>
+              {content.vault.playlists.map((pl, i) => {
+                const plOn = isEnabled(pl.enabled);
+                return (
+                <div key={pl.id} className={`space-y-3 rounded-xl border bg-zinc-900/50 p-4 sm:p-5 ${plOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-zinc-300">Playlist {i + 1}</span>
+                    <EnabledToggle
+                      on={plOn}
+                      onChange={(enabled) => updatePlaylist(i, { enabled })}
+                      name={pl.title || `playlist ${i + 1}`}
+                    />
+                  </div>
                   <Field label="Title" value={pl.title} onChange={(v) => updatePlaylist(i, { title: v })} />
                   <Field label="YouTube playlist URL" value={pl.href} onChange={(v) => updatePlaylist(i, { href: v })} />
                   <Field label="Description" value={pl.description} onChange={(v) => updatePlaylist(i, { description: v })} multiline />
                 </div>
-              ))}
+                );
+              })}
             </section>
           )}
 
           {activeSection === "experience" && (
             <section className="space-y-4">
-              <h2 className="text-lg font-semibold">Experience cards (YouTube reels)</h2>
-              <Field label="Section title" value={content.experience.title} onChange={(v) => setContent({ ...content, experience: { ...content.experience, title: v } })} />
-              {content.experience.roles.map((role, i) => (
-                <div key={role.id} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
-                  <span className="text-sm font-medium text-zinc-300">{role.company}</span>
-                  <Field label="Company" value={role.company} onChange={(v) => updateRole(i, { company: v })} />
-                  <Field label="Date range" value={role.dateRange} onChange={(v) => updateRole(i, { dateRange: v })} />
-                  <Field label="Role" value={role.role} onChange={(v) => updateRole(i, { role: v })} />
-                  <Field label="Tagline" value={role.tagline} onChange={(v) => updateRole(i, { tagline: v })} />
-                  <Field label="YouTube video URL" value={role.videoUrl} onChange={(v) => updateRole(i, { videoUrl: v })} hint="Plays when the card is opened" />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Experience cards (YouTube reels)</h2>
+                  <p className="mt-1 text-sm text-zinc-400">Edit or delete a card, then click Save changes to publish.</p>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  onClick={addRole}
+                  className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-zinc-700 px-3 py-2.5 text-sm hover:bg-zinc-800 sm:w-auto sm:py-2"
+                >
+                  <Plus size={14} /> Add experience card
+                </button>
+              </div>
+              <SectionVisibility
+                label="Experience"
+                on={isEnabled(content.experience.enabled)}
+                onChange={(enabled) => setContent({ ...content, experience: { ...content.experience, enabled } })}
+              />
+              <Field label="Section title" value={content.experience.title} onChange={(v) => setContent({ ...content, experience: { ...content.experience, title: v } })} />
+              {content.experience.roles.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-4 py-8 text-center text-sm text-zinc-500">
+                  No experience cards. Add one to show videos in this section.
+                </p>
+              ) : null}
+              {content.experience.roles.map((role, i) => {
+                const isEditing = editingRoleId === role.id;
+                const isOn = isEnabled(role.enabled);
+                return (
+                  <div key={`${role.id}-${i}`} className={`space-y-3 rounded-xl border bg-zinc-900/50 p-4 sm:p-5 ${isOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <HighlightVideoThumb href={role.videoUrl} />
+                        <div className="min-w-0 pt-0.5">
+                          <p className="truncate text-sm font-medium text-zinc-200">{role.company || "Untitled company"}</p>
+                          <p className="truncate text-xs text-zinc-500">{role.role || "No role yet"}</p>
+                          {role.videoUrl ? (
+                            <p className="mt-0.5 truncate text-[11px] text-zinc-600">{role.videoUrl}</p>
+                          ) : (
+                            <p className="mt-0.5 text-[11px] text-zinc-600">No YouTube URL</p>
+                          )}
+                          <p className={`mt-1 text-[11px] font-medium ${isOn ? "text-emerald-400" : "text-zinc-500"}`}>
+                            {isOn ? "On — visible on site" : "Off — hidden on site"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <EnabledToggle
+                          on={isOn}
+                          onChange={(next) => updateRole(i, { enabled: next })}
+                          name={role.company || "experience card"}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditingRoleId(isEditing ? null : role.id)}
+                          className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white sm:flex-none"
+                        >
+                          <Pencil size={12} />
+                          {isEditing ? "Close" : "Edit"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRole(i)}
+                          className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-red-400 sm:flex-none"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <div className="space-y-3 border-t border-zinc-800 pt-3">
+                        <Field label="Company" value={role.company} onChange={(v) => updateRole(i, { company: v })} />
+                        <Field label="Date range" value={role.dateRange} onChange={(v) => updateRole(i, { dateRange: v })} />
+                        <Field label="Role" value={role.role} onChange={(v) => updateRole(i, { role: v })} />
+                        <Field label="Tagline" value={role.tagline} onChange={(v) => updateRole(i, { tagline: v })} />
+                        <Field
+                          label="YouTube video URL"
+                          value={role.videoUrl}
+                          onChange={(v) => updateRole(i, { videoUrl: v })}
+                          onBlur={() => {
+                            const normalized = normalizeYouTubeHref(role.videoUrl);
+                            if (normalized !== role.videoUrl) updateRole(i, { videoUrl: normalized });
+                          }}
+                          hint="Plays when the card is opened on the site"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </section>
           )}
 
           {activeSection === "services" && (
             <section className="space-y-4">
               <h2 className="text-lg font-semibold">Services</h2>
+              <SectionVisibility
+                label="Services"
+                on={isEnabled(content.services.enabled)}
+                onChange={(enabled) => setContent({ ...content, services: { ...content.services, enabled } })}
+              />
               <Field label="Section title" value={content.services.title} onChange={(v) => setContent({ ...content, services: { ...content.services, title: v } })} />
-              {content.services.items.map((svc, i) => (
-                <div key={svc.indexLabel} className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
+              {content.services.items.map((svc, i) => {
+                const svcOn = isEnabled(svc.enabled);
+                return (
+                <div key={svc.indexLabel} className={`space-y-3 rounded-xl border bg-zinc-900/50 p-4 sm:p-5 ${svcOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-zinc-300">{svc.title || `Service ${i + 1}`}</span>
+                    <EnabledToggle
+                      on={svcOn}
+                      onChange={(enabled) => updateService(i, { enabled })}
+                      name={svc.title || `service ${i + 1}`}
+                    />
+                  </div>
                   <Field label="Index" value={svc.indexLabel} onChange={(v) => updateService(i, { indexLabel: v })} />
                   <Field label="Title" value={svc.title} onChange={(v) => updateService(i, { title: v })} />
                   <Field label="Description" value={svc.description} onChange={(v) => updateService(i, { description: v })} multiline />
                 </div>
-              ))}
+                );
+              })}
             </section>
           )}
 
           {activeSection === "footer" && (
             <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-6">
               <h2 className="text-lg font-semibold">Footer & contact</h2>
+              <SectionVisibility
+                label="Footer & Contact"
+                on={isEnabled(content.footer.enabled)}
+                onChange={(enabled) => setContent({ ...content, footer: { ...content.footer, enabled } })}
+              />
               <p className="text-xs text-zinc-500">
                 Tagline is edited in the Header section and appears in both places.
               </p>
               <Field label="Name" value={content.footer.name} onChange={(v) => setContent({ ...content, footer: { ...content.footer, name: v } })} />
               <Field label="Status label" value={content.footer.statusLabel} onChange={(v) => setContent({ ...content, footer: { ...content.footer, statusLabel: v } })} />
               <Field label="Email" value={content.footer.email} onChange={(v) => setContent({ ...content, footer: { ...content.footer, email: v } })} />
-              {content.footer.socials.map((social, i) => (
-                <div key={i} className="grid gap-3 sm:grid-cols-2">
+              {content.footer.socials.map((social, i) => {
+                const socialOn = isEnabled(social.enabled);
+                return (
+                <div key={i} className={`space-y-3 rounded-lg border p-3 ${socialOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-zinc-300">{social.label || `Social ${i + 1}`}</span>
+                    <EnabledToggle
+                      on={socialOn}
+                      onChange={(enabled) => {
+                        const socials = [...content.footer.socials];
+                        socials[i] = { ...socials[i]!, enabled };
+                        setContent({ ...content, footer: { ...content.footer, socials } });
+                      }}
+                      name={social.label || `social ${i + 1}`}
+                    />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
                   <Field
                     label={`Social ${i + 1} label`}
                     value={social.label}
@@ -1118,8 +1401,10 @@ export default function AdminPage() {
                       setContent({ ...content, footer: { ...content.footer, socials } });
                     }}
                   />
+                  </div>
                 </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 onClick={() =>
@@ -1136,6 +1421,21 @@ export default function AdminPage() {
           )}
 
           {activeSection === "resume" && (
+            <div className="space-y-4">
+              <SectionVisibility
+                label="Resume / CV"
+                on={isEnabled(content.resume?.enabled)}
+                onChange={(enabled) =>
+                  setContent({
+                    ...content,
+                    resume: {
+                      url: content.resume?.url ?? "",
+                      downloadName: content.resume?.downloadName ?? "Rishabh-Diwaker-CV.pdf",
+                      enabled,
+                    },
+                  })
+                }
+              />
             <ResumeEditor
               currentUrl={content.resume?.url || undefined}
               downloadName={content.resume?.downloadName ?? "Rishabh-Diwaker-CV.pdf"}
@@ -1145,6 +1445,7 @@ export default function AdminPage() {
                   resume: {
                     url: content.resume?.url ?? "",
                     downloadName: v,
+                    enabled: content.resume?.enabled,
                   },
                 })
               }
@@ -1154,6 +1455,7 @@ export default function AdminPage() {
                   resume: {
                     url: v,
                     downloadName: content.resume?.downloadName ?? "Rishabh-Diwaker-CV.pdf",
+                    enabled: content.resume?.enabled,
                   },
                 })
               }
@@ -1161,6 +1463,7 @@ export default function AdminPage() {
               error={resumeError}
               onUpload={uploadResume}
             />
+            </div>
           )}
 
           {activeSection === "tabIcon" && (

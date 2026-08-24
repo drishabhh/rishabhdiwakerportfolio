@@ -14,6 +14,7 @@ import { ServicesGlassBento } from "@/components/services-glass-bento";
 import { SiteFooter } from "@/components/site-footer";
 import { SkillsTagCloud } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
+import { isEnabled } from "@/lib/content-types";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
 import { smoothScrollToY } from "@/lib/smooth-scroll";
@@ -229,7 +230,9 @@ export default function HomeClient({ content }: HomeClientProps) {
 
   const highlightedEdits: HighlightEditItem[] = useMemo(
     () =>
-      sortedHighlights(content.highlights.items).map((item) => {
+      sortedHighlights(content.highlights.items)
+        .filter((item) => isEnabled(item.enabled))
+        .map((item) => {
         const href = normalizeYouTubeHref(item.href);
         const hosted = Boolean(item.fileUrl?.trim());
         const poster = customHighlightPoster(item.posterUrl);
@@ -243,6 +246,30 @@ export default function HomeClient({ content }: HomeClientProps) {
         };
       }),
     [content.highlights.items],
+  );
+
+  const visibleNavItems = useMemo(
+    () =>
+      navItems.filter((item) => {
+        if (item.id === "home") return true;
+        if (item.id === "summary") return isEnabled(content.summary.enabled);
+        if (item.id === "highlights") return isEnabled(content.highlights.enabled);
+        if (item.id === "skills") return isEnabled(content.skills.enabled);
+        if (item.id === "vault") return isEnabled(content.vault.enabled);
+        if (item.id === "experience") return isEnabled(content.experience.enabled);
+        if (item.id === "services") return isEnabled(content.services.enabled);
+        if (item.id === "contact") return isEnabled(content.footer.enabled);
+        return true;
+      }),
+    [
+      content.summary.enabled,
+      content.highlights.enabled,
+      content.skills.enabled,
+      content.vault.enabled,
+      content.experience.enabled,
+      content.services.enabled,
+      content.footer.enabled,
+    ],
   );
 
   const heroTaglineVariants = useMemo(
@@ -594,6 +621,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         useWebGL={useHeroWebGL}
       />
 
+      {isEnabled(content.header.enabled) ? (
       <motion.header
         initial="hidden"
         animate="visible"
@@ -644,7 +672,9 @@ export default function HomeClient({ content }: HomeClientProps) {
           </div>
         </div>
       </motion.header>
+      ) : null}
 
+      {isEnabled(content.resume?.enabled) ? (
       <div
         className="fixed right-4 top-[max(5.25rem,env(safe-area-inset-top))] z-[60] flex flex-col items-center gap-2 md:right-8 md:top-[max(5.5rem,env(safe-area-inset-top))]"
       >
@@ -683,6 +713,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           )}
         </button>
       </div>
+      ) : null}
 
       <section
         id="home"
@@ -690,6 +721,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         aria-label="Home"
       />
 
+      {isEnabled(content.hero.enabled) ? (
       <motion.div
         ref={heroOverlayRef}
         data-hero-overlay
@@ -797,8 +829,10 @@ export default function HomeClient({ content }: HomeClientProps) {
           </div>
         </div>
       </motion.div>
+      ) : null}
 
       <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+        {isEnabled(content.summary.enabled) ? (
         <CinematicSection
           id="summary"
           depth="medium"
@@ -823,8 +857,10 @@ export default function HomeClient({ content }: HomeClientProps) {
             </div>
           </div>
         </CinematicSection>
+        ) : null}
       </div>
 
+      {isEnabled(content.highlights.enabled) && highlightedEdits.length > 0 ? (
       <CinematicSection as="div" divider className="relative z-20 scroll-mt-28 w-full">
         <HighlightedEditsGallery
           items={highlightedEdits}
@@ -832,8 +868,10 @@ export default function HomeClient({ content }: HomeClientProps) {
           sectionTitleClass={sectionHeadingClass}
         />
       </CinematicSection>
+      ) : null}
 
       <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+        {isEnabled(content.skills.enabled) ? (
         <CinematicSection id="skills" depth="medium" divider className="scroll-mt-28 flex flex-col gap-6 md:gap-8">
           <SkillsTagCloud
             isDark={isDark}
@@ -842,10 +880,12 @@ export default function HomeClient({ content }: HomeClientProps) {
             sectionTitleClass={sectionHeadingClass}
             title={content.skills.title}
             subtitle={content.skills.subtitle}
-            blocks={content.skills.blocks}
+            blocks={content.skills.blocks.filter((block) => isEnabled(block.enabled))}
           />
         </CinematicSection>
+        ) : null}
 
+        {isEnabled(content.vault.enabled) ? (
         <CinematicSection as="div" divider reveal={false} className="relative z-20 scroll-mt-28">
           <ProductionVault
             isDark={isDark}
@@ -854,15 +894,19 @@ export default function HomeClient({ content }: HomeClientProps) {
             sectionTitleClass={sectionHeadingClass}
             title={content.vault.title}
             subtitle={content.vault.subtitle}
-            playlists={content.vault.playlists}
+            playlists={content.vault.playlists.filter((playlist) => isEnabled(playlist.enabled))}
           />
         </CinematicSection>
+        ) : null}
 
+        {isEnabled(content.experience.enabled) ? (
         <CinematicSection id="experience" divider reveal={false} className="scroll-mt-28 space-y-6">
           <h2 className={sectionHeadingClass}>{content.experience.title}</h2>
           <ExperienceFlipCards isDark={isDark} roles={content.experience.roles} />
         </CinematicSection>
+        ) : null}
 
+        {isEnabled(content.services.enabled) ? (
         <div className="relative z-20 scroll-mt-28">
           <ServicesGlassBento
           isDark={isDark}
@@ -871,9 +915,10 @@ export default function HomeClient({ content }: HomeClientProps) {
           mutedClass={cardMutedClass}
           cardSurfaceClass={cardSurfaceClass}
           title={content.services.title}
-          services={content.services.items}
+          services={content.services.items.filter((item) => isEnabled(item.enabled))}
         />
         </div>
+        ) : null}
 
       </div>
 
@@ -883,14 +928,16 @@ export default function HomeClient({ content }: HomeClientProps) {
         className="pointer-events-none relative z-[11] h-28 w-full bg-gradient-to-b from-transparent via-[#0a0a0a]/75 to-[#0A0A0A] md:h-40 md:via-[#0a0a0a]/82"
       />
 
+      {isEnabled(content.footer.enabled) ? (
       <SiteFooter
         name={content.footer.name}
         tagline={content.header.tagline}
         statusLabel={content.footer.statusLabel}
         email={content.footer.email}
-        socials={content.footer.socials}
+        socials={content.footer.socials.filter((social) => isEnabled(social.enabled))}
         sectionTitleClass={sectionHeadingClass}
       />
+      ) : null}
 
       <nav className="fixed bottom-[max(2rem,env(safe-area-inset-bottom))] left-1/2 z-[70] max-w-[calc(100vw-1.5rem)] -translate-x-1/2">
         <div className={`relative overflow-hidden rounded-full ${dockShellClass}`}>
@@ -921,7 +968,7 @@ export default function HomeClient({ content }: HomeClientProps) {
             data-lenis-prevent
             className="relative z-[2] flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           >
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 

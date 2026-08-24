@@ -1,6 +1,7 @@
 "use client";
 
 import type { ExperienceRole as ContentExperienceRole } from "@/lib/content";
+import { isEnabled } from "@/lib/content-types";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { motion, useReducedMotion } from "framer-motion";
 import { Play } from "lucide-react";
@@ -260,10 +261,11 @@ export type ExperienceFlipCardsProps = {
 
 export function ExperienceFlipCards({ isDark, roles }: ExperienceFlipCardsProps) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const visibleRoles = roles.filter((role) => isEnabled(role.enabled));
 
   return (
     <div className="grid gap-6 overflow-visible md:grid-cols-3 md:gap-5">
-      {roles.map((entry) => {
+      {visibleRoles.map((entry) => {
         const isOpen = openCardId === entry.id;
         const isDimmed = openCardId !== null && openCardId !== entry.id;
 
