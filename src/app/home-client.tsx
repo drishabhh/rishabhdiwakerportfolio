@@ -7,17 +7,17 @@ import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
 import { YoutubeIcon } from "@/components/icons/youtube-icon";
-import { HighlightedEditsGallery, type HighlightEditItem } from "@/components/highlighted-edits-gallery";
-import { ExperienceFlipCards } from "@/components/experience-flip-cards";
-import { ProductionVault } from "@/components/production-vault";
-import { ServicesGlassBento } from "@/components/services-glass-bento";
-import { SiteFooter } from "@/components/site-footer";
-import { SkillsTagCloud } from "@/components/skills-tag-cloud";
+import { HighlightedEditsGallery as HighlightedEditsGalleryBase, type HighlightEditItem } from "@/components/highlighted-edits-gallery";
+import { ExperienceFlipCards as ExperienceFlipCardsBase } from "@/components/experience-flip-cards";
+import { ProductionVault as ProductionVaultBase } from "@/components/production-vault";
+import { ServicesGlassBento as ServicesGlassBentoBase } from "@/components/services-glass-bento";
+import { SiteFooter as SiteFooterBase } from "@/components/site-footer";
+import { SkillsTagCloud as SkillsTagCloudBase } from "@/components/skills-tag-cloud";
 import type { SiteContent } from "@/lib/content";
 import { isEnabled } from "@/lib/content-types";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { isExternalResumeUrl, resolveResumeDownloadUrl } from "@/lib/resume-download";
-import { smoothScrollToY } from "@/lib/smooth-scroll";
+import { cinematicEase as scrollEase, navScrollDuration, onUserScrollIntent, smoothScrollToY } from "@/lib/smooth-scroll";
 import { normalizeYouTubeHref } from "@/lib/youtube";
 import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
@@ -38,7 +38,16 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+/* Scroll flips activeTab / hero overlay state as you leave the hero; memoized sections
+   skip those re-renders (their props are stable), which keeps the first scroll hitch-free. */
+const HighlightedEditsGallery = memo(HighlightedEditsGalleryBase);
+const ExperienceFlipCards = memo(ExperienceFlipCardsBase);
+const ProductionVault = memo(ProductionVaultBase);
+const ServicesGlassBento = memo(ServicesGlassBentoBase);
+const SiteFooter = memo(SiteFooterBase);
+const SkillsTagCloud = memo(SkillsTagCloudBase);
 
 const HEADER_SOCIALS = [
   {
@@ -247,6 +256,23 @@ export default function HomeClient({ content }: HomeClientProps) {
         };
       }),
     [content.highlights.items],
+  );
+
+  const skillBlocks = useMemo(
+    () => content.skills.blocks.filter((block) => isEnabled(block.enabled)),
+    [content.skills.blocks],
+  );
+  const vaultPlaylists = useMemo(
+    () => content.vault.playlists.filter((playlist) => isEnabled(playlist.enabled)),
+    [content.vault.playlists],
+  );
+  const serviceItems = useMemo(
+    () => content.services.items.filter((item) => isEnabled(item.enabled)),
+    [content.services.items],
+  );
+  const footerSocials = useMemo(
+    () => content.footer.socials.filter((social) => isEnabled(social.enabled)),
+    [content.footer.socials],
   );
 
   const visibleNavItems = useMemo(
@@ -547,39 +573,39 @@ export default function HomeClient({ content }: HomeClientProps) {
       setHeroOverlayVisible(id === "home");
       setContentElevated(id !== "home");
 
-      if (id === "home") {
-        returningHomeRef.current = true;
+      /* Scrolling by hand mid-glide replaces Lenis's animation and drops its onComplete,
+         so the lock is also released on user intent — otherwise the scroll spy freezes. */
+      const releaseLock = () => {
+        scrollLockRef.current = false;
+        returningHomeRef.current = false;
+        cancelScrollRef.current = null;
+      };
 
-        if (navReducedMotion || !lenis) {
-          if (!navReducedMotion && window.innerWidth < 768) {
-            cancelScrollRef.current = smoothScrollToY(0, {
-              duration: 680,
-              onComplete: () => {
-                scrollLockRef.current = false;
-                returningHomeRef.current = false;
-                cancelScrollRef.current = null;
-                setHeroOverlayVisible(true);
-                setContentElevated(false);
-              },
-            });
-            return;
-          }
-
-          window.scrollTo({ top: 0, behavior: "auto" });
-          scrollLockRef.current = false;
-          returningHomeRef.current = false;
+      const glide = (target: number | HTMLElement, distance: number, offset: number, arrive: () => void) => {
+        if (!lenis) {
+          const targetY = typeof target === "number" ? target : target.getBoundingClientRect().top + window.scrollY;
+          cancelScrollRef.current = smoothScrollToY(targetY, { offset, onComplete: arrive, onInterrupt: releaseLock });
           return;
         }
-
-        lenis.scrollTo(0, {
-          duration: 1.05,
-          easing: (t) => 1 - Math.pow(1 - t, 3),
+        const stopWatching = onUserScrollIntent(releaseLock);
+        cancelScrollRef.current = stopWatching;
+        lenis.scrollTo(target, {
+          offset: -offset,
+          duration: navScrollDuration(distance),
+          easing: scrollEase,
           onComplete: () => {
-            scrollLockRef.current = false;
-            returningHomeRef.current = false;
-            setHeroOverlayVisible(true);
-            setContentElevated(false);
+            stopWatching();
+            arrive();
           },
+        });
+      };
+
+      if (id === "home") {
+        returningHomeRef.current = true;
+        glide(0, window.scrollY, 0, () => {
+          releaseLock();
+          setHeroOverlayVisible(true);
+          setContentElevated(false);
         });
         return;
       }
@@ -589,25 +615,13 @@ export default function HomeClient({ content }: HomeClientProps) {
       const scrollOffset =
         id === "contact" && window.innerWidth < 768 ? 76 : sectionScrollOffset;
 
-      if (navReducedMotion || !lenis) {
-        const targetY = section.getBoundingClientRect().top + window.scrollY - scrollOffset;
-        window.scrollTo({ top: targetY, behavior: "auto" });
-        scrollLockRef.current = false;
-        return;
-      }
-
-      lenis.scrollTo(section, {
-        offset: -scrollOffset,
-        duration: 1.35,
-        easing: (t) => 1 - Math.pow(1 - t, 3),
-        onComplete: () => {
-          scrollLockRef.current = false;
-          setHeroOverlayVisible(false);
-          setContentElevated(true);
-        },
+      glide(section, section.getBoundingClientRect().top - scrollOffset, scrollOffset, () => {
+        releaseLock();
+        setHeroOverlayVisible(false);
+        setContentElevated(true);
       });
     },
-    [lenis, navReducedMotion],
+    [lenis],
   );
 
   return (
@@ -884,7 +898,7 @@ export default function HomeClient({ content }: HomeClientProps) {
             sectionTitleClass={sectionHeadingClass}
             title={content.skills.title}
             subtitle={content.skills.subtitle}
-            blocks={content.skills.blocks.filter((block) => isEnabled(block.enabled))}
+            blocks={skillBlocks}
           />
         </CinematicSection>
         ) : null}
@@ -898,7 +912,7 @@ export default function HomeClient({ content }: HomeClientProps) {
             sectionTitleClass={sectionHeadingClass}
             title={content.vault.title}
             subtitle={content.vault.subtitle}
-            playlists={content.vault.playlists.filter((playlist) => isEnabled(playlist.enabled))}
+            playlists={vaultPlaylists}
           />
         </CinematicSection>
         ) : null}
@@ -919,7 +933,7 @@ export default function HomeClient({ content }: HomeClientProps) {
           mutedClass={cardMutedClass}
           cardSurfaceClass={cardSurfaceClass}
           title={content.services.title}
-          services={content.services.items.filter((item) => isEnabled(item.enabled))}
+          services={serviceItems}
         />
         </div>
         ) : null}
@@ -938,7 +952,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         tagline={content.header.tagline}
         statusLabel={content.footer.statusLabel}
         email={content.footer.email}
-        socials={content.footer.socials.filter((social) => isEnabled(social.enabled))}
+        socials={footerSocials}
         sectionTitleClass={sectionHeadingClass}
       />
       ) : null}
