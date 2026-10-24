@@ -1,7 +1,8 @@
 "use client";
 
 import { useHydrated } from "@/hooks/use-hydrated";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -21,7 +22,7 @@ type HeaderRoleTickerProps = {
 
 export function HeaderRoleTicker({ tagline, className = "" }: HeaderRoleTickerProps) {
   const titles = useMemo(() => parseRoleTitles(tagline), [tagline]);
-  const reduced = Boolean(useReducedMotion());
+  const reduced = useReducedMotionSafe();
   const [index, setIndex] = useState(0);
   const hydrated = useHydrated();
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion } from "framer-motion";
 import { Play } from "lucide-react";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -13,7 +14,7 @@ export type HeroCtaProps = {
 };
 
 export function HeroCta({ label, href, visible, onHoverChange }: HeroCtaProps) {
-  const reduced = Boolean(useReducedMotion());
+  const reduced = useReducedMotionSafe();
 
   if (!href.trim()) return null;
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import Image from "next/image";
 import { useCallback, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { SocialLink } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 
 const FOOTER_BG = "#0A0A0A";
 const ORANGE_GLOW = "rgba(255, 77, 0, 0.05)";
@@ -80,7 +81,7 @@ export function SiteFooter({
   socials,
   sectionTitleClass = SECTION_TITLE_ON_HERO,
 }: SiteFooterProps) {
-  const reduced = Boolean(useReducedMotion());
+  const reduced = useReducedMotionSafe();
   const rootRef = useRef<HTMLElement>(null);
   const [footHot, setFootHot] = useState(false);
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useNativeSectionScrollProgress } from "@/hooks/use-native-scroll-progress";
-import { motion, useReducedMotion, useTransform } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion, useTransform } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type CinematicSectionProps = {
@@ -79,7 +80,7 @@ export function CinematicSection({
   revealSpeed = "normal",
 }: CinematicSectionProps) {
   const ref = useRef<HTMLElement>(null);
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionSafe();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {

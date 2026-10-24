@@ -1,7 +1,8 @@
 "use client";
 
 import { useHydrated } from "@/hooks/use-hydrated";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion } from "framer-motion";
 import { Children, useEffect, useState, type ReactNode } from "react";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -60,6 +61,8 @@ export type TextLoopProps = {
   rotateFonts?: boolean;
   /** Snappier word transitions (e.g. when CTA is hovered). */
   accelerated?: boolean;
+  /** Keep the full shake animation even when the visitor prefers reduced motion. */
+  forceMotion?: boolean;
 };
 
 /**
@@ -72,11 +75,13 @@ export function TextLoop({
   stableSlot = false,
   rotateFonts,
   accelerated = false,
+  forceMotion = false,
 }: TextLoopProps) {
   const items = Children.toArray(children).filter(Boolean);
   const [stepIndex, setStepIndex] = useState(0);
   const hydrated = useHydrated();
-  const prefersReducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionSafe();
+  const prefersReducedMotion = reducedMotion && !forceMotion;
   const useRotatingFonts = rotateFonts ?? true;
 
   useEffect(() => {

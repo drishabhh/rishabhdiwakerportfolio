@@ -22,7 +22,8 @@ import { normalizeYouTubeHref } from "@/lib/youtube";
 import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
 import { customHighlightPoster } from "@/lib/highlight-frames";
-import { motion, useReducedMotion, useSpring } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion, useSpring } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
 import {
@@ -153,7 +154,7 @@ const heroTaglineWidthClass =
 export default function HomeClient({ content }: HomeClientProps) {
   const lenis = useLenis();
   const [isMounted, setIsMounted] = useState(false);
-  const navReducedMotion = useReducedMotion();
+  const navReducedMotion = useReducedMotionSafe();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
@@ -276,9 +277,11 @@ export default function HomeClient({ content }: HomeClientProps) {
     () =>
       navReducedMotion
         ? {
-            hidden: { opacity: 0 },
+            /* Reduced motion kicks in after hydration, so clear the server's blur. */
+            hidden: { opacity: 0, filter: "blur(0px)" },
             visible: {
               opacity: 1,
+              filter: "blur(0px)",
               transition: { duration: 0.45, delay: 0.55, ease: cinematicEase },
             },
           }
@@ -806,6 +809,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                   <TextLoop
                     interval={showreelHover ? HERO_WORD_INTERVAL_FAST : HERO_WORD_INTERVAL}
                     accelerated={showreelHover}
+                    forceMotion
                     stableSlot
                     className="min-h-[1.2em] w-[9ch] shrink-0 text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
                   >

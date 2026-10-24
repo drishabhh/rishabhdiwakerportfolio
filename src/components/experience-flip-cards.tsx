@@ -3,7 +3,8 @@
 import type { ExperienceRole as ContentExperienceRole } from "@/lib/content";
 import { isEnabled } from "@/lib/content-types";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion } from "framer-motion";
 import { Play } from "lucide-react";
 import { useEffect, useState, type SyntheticEvent } from "react";
 
@@ -54,7 +55,7 @@ type ExperienceCardProps = {
 };
 
 function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: ExperienceCardProps) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotionSafe();
   const isMobile = useIsMobile();
   const hasMarketingLinks = Boolean(entry.marketingLinks?.length);
   const embedSrc = isOpen ? buildEmbedUrl(roleVideoId(entry), entry.embedStart) : undefined;

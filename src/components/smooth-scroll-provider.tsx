@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducedMotion } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { ReactLenis } from "lenis/react";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -20,7 +20,7 @@ type SmoothScrollProviderProps = {
 };
 
 export function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionSafe();
   const [mounted, setMounted] = useState(false);
   const [enableLenis, setEnableLenis] = useState(false);
 

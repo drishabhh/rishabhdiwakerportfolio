@@ -2,7 +2,8 @@
 
 import type { SkillBlock } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
-import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -195,7 +196,7 @@ export function SkillsTagCloud({
   blocks,
 }: SkillsTagCloudProps) {
   const allTagLabels = blocks.flatMap((b) => b.tags);
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionSafe();
   const wrapRef = useRef<HTMLDivElement>(null);
   const tagRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const [rimByLabel, setRimByLabel] = useState<Record<string, number>>({});

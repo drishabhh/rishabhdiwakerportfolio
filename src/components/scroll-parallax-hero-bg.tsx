@@ -1,7 +1,8 @@
 "use client";
 
 import { useNativePageScrollProgress } from "@/hooks/use-native-scroll-progress";
-import { motion, useReducedMotion, useTransform } from "framer-motion";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
+import { motion, useTransform } from "framer-motion";
 import Image from "next/image";
 
 type ScrollParallaxHeroBgProps = {
@@ -30,7 +31,7 @@ export function ScrollParallaxHeroBg({
   desktopFadeMs = 600,
   onDesktopFadeComplete,
 }: ScrollParallaxHeroBgProps) {
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionSafe();
   const scrollYProgress = useNativePageScrollProgress(!reduced);
 
   const scale = useTransform(scrollYProgress, [0, 0.45, 1], reduced ? [1, 1, 1] : [1, 1.06, 1.1]);

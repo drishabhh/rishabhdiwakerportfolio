@@ -1,9 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useReducedMotion } from "framer-motion";
 import { Component, useEffect, useState, type ReactNode } from "react";
 import { ScrollParallaxHeroBg } from "@/components/scroll-parallax-hero-bg";
+import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 
 const HeroWebGLScene = dynamic(
   () => import("@/components/hero-webgl-scene").then((mod) => mod.HeroWebGLScene),
@@ -50,7 +50,7 @@ export function HeroBackground({
   hidden = false,
   useWebGL,
 }: HeroBackgroundProps) {
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionSafe();
   const [webglFailed, setWebglFailed] = useState(false);
   const [webglReady, setWebglReady] = useState(false);
   const [webglRevealed, setWebglRevealed] = useState(false);
