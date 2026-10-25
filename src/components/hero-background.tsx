@@ -35,8 +35,9 @@ class WebGLErrorBoundary extends Component<
 
 export type HeroBackgroundProps = {
   desktopSrc: string;
-  /** Depth map aligned with desktopSrc, for the WebGL layer's 2.5D parallax. */
-  depthSrc: string;
+  /** WebGL layers: desktopSrc with the person painted out, and the person cutout aligned to it. */
+  plateSrc: string;
+  personSrc: string;
   mobileSrc: string;
   mobileObjectPosition: string;
   desktopObjectPosition?: string;
@@ -48,7 +49,8 @@ export type HeroBackgroundProps = {
 
 export function HeroBackground({
   desktopSrc,
-  depthSrc,
+  plateSrc,
+  personSrc,
   mobileSrc,
   mobileObjectPosition,
   desktopObjectPosition = "center",
@@ -114,8 +116,8 @@ export function HeroBackground({
           }}
         >
           <HeroWebGLScene
-            imageSrc={desktopSrc}
-            depthSrc={depthSrc}
+            imageSrc={plateSrc}
+            personSrc={personSrc}
             objectPosition={desktopObjectPosition}
             hidden={hidden}
             paused={paused}

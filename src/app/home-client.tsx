@@ -168,8 +168,9 @@ const navItems = [
 ] as const;
 
 const HOME_BG = "/hero/home-bg.jpg";
-/** Depth map for HOME_BG's 2.5D parallax — regenerate with scripts/build-hero-depth.mjs. */
-const HOME_BG_DEPTH = "/hero/home-depth.png";
+/** WebGL hero layers built from HOME_BG and the person cutout — regenerate with scripts/build-hero-layers.mjs. */
+const HOME_BG_PLATE = "/hero/home-plate.jpg";
+const HOME_BG_PERSON = "/hero/home-person.png";
 const HOME_BG_MOBILE = "/hero/home-bg.jpg";
 const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
 const HOME_BG_OBJECT_POSITION_DESKTOP = "center";
@@ -593,7 +594,8 @@ export default function HomeClient({ content }: HomeClientProps) {
     >
       <HeroBackground
         desktopSrc={HOME_BG}
-        depthSrc={HOME_BG_DEPTH}
+        plateSrc={HOME_BG_PLATE}
+        personSrc={HOME_BG_PERSON}
         mobileSrc={HOME_BG_MOBILE}
         mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
         desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}

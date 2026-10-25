@@ -8,9 +8,10 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 type HeroWebGLSceneProps = {
+  /** Hero photo with the person painted out (the landscape layer). */
   imageSrc: string;
-  /** Grayscale depth map aligned with imageSrc (white = near); see scripts/build-hero-depth.mjs. */
-  depthSrc: string;
+  /** Person cutout aligned with imageSrc; see scripts/build-hero-layers.mjs. */
+  personSrc: string;
   objectPosition?: string;
   hidden?: boolean;
   /** Freeze on the last frame (no rendering) while covered. */
@@ -34,11 +35,11 @@ const VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-/* One pass: depth parallax + scroll dolly, velocity chromatic split / motion streak,
-   then (after sRGB encode) an anamorphic flare and film grain. */
+/* One pass: the landscape plate plus the rigid person layer, with scroll dolly and pointer parallax,
+   velocity chromatic split / motion streak, then (after sRGB encode) an anamorphic flare and film grain. */
 const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uMap;
-  uniform sampler2D uDepth;
+  uniform sampler2D uPerson;
   uniform vec2 uPointer;
   uniform vec2 uFocus;
   uniform float uScroll;
@@ -47,39 +48,51 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uGrain;
   varying vec2 vUv;
 
+  const vec2 POINTER_SHIFT = vec2(0.018, 0.012);
+
   float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
   }
 
+  // Landscape depth: far sky and peaks, nearer forest toward the bottom (0 = far, 1 = near).
+  float landDepth(vec2 uv) {
+    return 0.06 + 0.55 * smoothstep(0.3, 1.0, 1.0 - uv.y);
+  }
+
+  // Where a layer at depth d samples for screen position uv: a dolly toward the subject as the
+  // page scrolls, pointer parallax, and a slight lag behind fast scrolling, all scaled by depth.
+  vec2 layerUv(vec2 uv, float d) {
+    vec2 st = uFocus + (uv - uFocus) / (1.0 + uScroll * (0.05 + 0.1 * d));
+    return st - uPointer * POINTER_SHIFT * (d - 0.25) - vec2(0.0, uVelocity * 0.0009 * (d - 0.25));
+  }
+
+  // The landscape bends smoothly with its depth; the person is one rigid layer at depth 1,
+  // so the face slides and scales as a whole and never warps.
+  vec3 scene(vec2 uv) {
+    vec3 plate = texture2D(uMap, clamp(layerUv(uv, landDepth(uv)), 0.001, 0.999)).rgb;
+    vec4 person = texture2D(uPerson, layerUv(uv, 1.0));
+    return mix(plate, person.rgb, person.a);
+  }
+
   void main() {
-    vec2 uv = vUv;
-    float depth = texture2D(uDepth, uv).r;
-
-    // Dolly toward the subject as the page scrolls; near layers grow faster than the sky.
-    uv = uFocus + (uv - uFocus) / (1.0 + uScroll * (0.05 + 0.1 * depth));
-
-    // Near layers follow the pointer and lag a touch behind fast scrolling; the sky stays put.
-    vec2 shift = uPointer * vec2(0.018, 0.012) * (depth - 0.25);
-    shift.y += uVelocity * 0.0009 * (depth - 0.25);
-    vec2 st = clamp(uv - shift, 0.001, 0.999);
-
     // Chromatic split along the scroll axis, stronger toward the frame edges.
     float edge = 0.4 + length(vUv - 0.5) * 1.4;
     float ca = clamp(uVelocity * 0.00045, -0.012, 0.012) * edge;
-    vec3 color = vec3(
-      texture2D(uMap, st + vec2(0.0, ca)).r,
-      texture2D(uMap, st).g,
-      texture2D(uMap, st - vec2(0.0, ca)).b
-    );
+    vec3 color;
+    if (abs(ca) < 0.0001) {
+      color = scene(vUv);
+    } else {
+      color = vec3(scene(vUv + vec2(0.0, ca)).r, scene(vUv).g, scene(vUv - vec2(0.0, ca)).b);
+    }
 
     // Motion streak while moving fast.
     float streak = clamp(abs(uVelocity) * 0.0007, 0.0, 0.02);
     if (streak > 0.0005) {
       vec3 acc = color;
       for (int i = 1; i <= 4; i++) {
-        acc += texture2D(uMap, st - vec2(0.0, streak * float(i) * 0.25 * sign(uVelocity))).rgb;
+        acc += scene(vUv - vec2(0.0, streak * float(i) * 0.25 * sign(uVelocity)));
       }
       color = acc / 5.0;
     }
@@ -98,17 +111,16 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-/** Runs once the textures load: the photo is sRGB color; the depth map is raw data. */
+/** Runs once the textures load: both layers are sRGB colour images. */
 function configureTextures(loaded: THREE.Texture | THREE.Texture[]) {
-  const [map, depth] = Array.isArray(loaded) ? loaded : [loaded];
-  for (const texture of [map, depth]) {
+  const [map, person] = Array.isArray(loaded) ? loaded : [loaded];
+  for (const texture of [map, person]) {
     if (!texture) continue;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.needsUpdate = true;
   }
-  if (map) map.colorSpace = THREE.SRGBColorSpace;
-  if (depth) depth.colorSpace = THREE.NoColorSpace;
+  for (const texture of [map, person]) if (texture) texture.colorSpace = THREE.SRGBColorSpace;
 }
 
 function parseHorizontalObjectPosition(objectPosition: string, imageWidth: number): number {
@@ -131,20 +143,20 @@ function parseHorizontalObjectPosition(objectPosition: string, imageWidth: numbe
 
 function HeroImagePlane({
   imageSrc,
-  depthSrc,
+  personSrc,
   objectPosition = "center",
   interactive = false,
   pointerRampMs = 500,
   onReady,
 }: {
   imageSrc: string;
-  depthSrc: string;
+  personSrc: string;
   objectPosition?: string;
   interactive?: boolean;
   pointerRampMs?: number;
   onReady?: () => void;
 }) {
-  const [texture, depthTexture] = useTexture([imageSrc, depthSrc], configureTextures);
+  const [texture, personTexture] = useTexture([imageSrc, personSrc], configureTextures);
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const progress = useNativePageScrollProgress(true);
@@ -157,7 +169,7 @@ function HeroImagePlane({
   const uniforms = useMemo(
     () => ({
       uMap: { value: texture },
-      uDepth: { value: depthTexture },
+      uPerson: { value: personTexture },
       uPointer: { value: new THREE.Vector2() },
       uFocus: { value: SUBJECT_FOCUS },
       uScroll: { value: 0 },
@@ -165,12 +177,12 @@ function HeroImagePlane({
       uTime: { value: 0 },
       uGrain: { value: 0.07 },
     }),
-    [texture, depthTexture],
+    [texture, personTexture],
   );
 
   useEffect(() => {
     onReady?.();
-  }, [texture, depthTexture, onReady]);
+  }, [texture, personTexture, onReady]);
 
   useEffect(() => {
     const resetPointer = () => {
@@ -292,14 +304,14 @@ function HeroImagePlane({
 
 function HeroSceneContent({
   imageSrc,
-  depthSrc,
+  personSrc,
   objectPosition,
   interactive,
   pointerRampMs,
   onReady,
 }: {
   imageSrc: string;
-  depthSrc: string;
+  personSrc: string;
   objectPosition?: string;
   interactive?: boolean;
   pointerRampMs?: number;
@@ -308,7 +320,7 @@ function HeroSceneContent({
   return (
     <HeroImagePlane
       imageSrc={imageSrc}
-      depthSrc={depthSrc}
+      personSrc={personSrc}
       objectPosition={objectPosition}
       interactive={interactive}
       pointerRampMs={pointerRampMs}
@@ -319,7 +331,7 @@ function HeroSceneContent({
 
 export function HeroWebGLScene({
   imageSrc,
-  depthSrc,
+  personSrc,
   objectPosition = "center",
   hidden = false,
   paused = false,
@@ -356,7 +368,7 @@ export function HeroWebGLScene({
         <Suspense fallback={null}>
           <HeroSceneContent
             imageSrc={imageSrc}
-            depthSrc={depthSrc}
+            personSrc={personSrc}
             objectPosition={objectPosition}
             interactive={interactive}
             pointerRampMs={pointerRampMs}
