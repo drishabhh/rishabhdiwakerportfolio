@@ -1,66 +1,42 @@
 // Builds the two WebGL hero layers from the hero photo and the person cutout:
-//   public/hero/home-person.png — the cutout, moved into the hero's framing, with edge colours
-//                                 bled under soft edges so filtering never shows a halo.
+//   public/hero/home-person.png — the person, in the photo's own tones, masked by the cutout's alpha.
 //   public/hero/home-plate.jpg  — the hero photo with the person painted out from the surroundings
 //                                 (only a thin sliver of it is ever revealed by the parallax).
+// The cutout is used only as a mask, so the hero shows the photo exactly as graded.
 // Re-run after changing either image:  node scripts/build-hero-layers.mjs
 import sharp from "sharp";
 
 const PHOTO = "public/hero/home-bg.jpg";
 const CUTOUT = "assets/hero/person-cutout.png";
-/* Where the cutout sits relative to PHOTO — measured by maximising silhouette overlap (IoU). */
+/* Where the cutout sits relative to PHOTO — measured by maximising correlation over the person. */
 const OFFSET_X = -361;
-const OFFSET_Y = 0;
+const OFFSET_Y = 1;
 /** Margin painted out around the person, in px — just enough to cover the soft edge. */
 const HOLE_MARGIN = 3;
 
 const { width: W, height: H } = await sharp(PHOTO).metadata();
 const raw = (channels) => ({ raw: { width: W, height: H, channels } });
 
-// --- Person layer: shift into place, pad to the photo size (copying the edge row). ---
 const cut = await sharp(CUTOUT).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-const person = Buffer.alloc(W * H * 4);
+const photo = await sharp(PHOTO).removeAlpha().raw().toBuffer();
+
+// --- Person layer: photo colour, cutout alpha moved into place. ---
+const alpha = Buffer.alloc(W * H);
 for (let y = 0; y < H; y++) {
-  const sy = Math.min(cut.info.height - 1, y - OFFSET_Y);
+  const sy = y - OFFSET_Y;
+  if (sy < 0 || sy >= cut.info.height) continue;
   for (let x = 0; x < W; x++) {
     const sx = x - OFFSET_X;
-    if (sx < 0 || sx >= cut.info.width || sy < 0) continue;
-    const from = (sy * cut.info.width + sx) * 4;
-    cut.data.copy(person, (y * W + x) * 4, from, from + 4);
+    if (sx >= 0 && sx < cut.info.width) alpha[y * W + x] = cut.data[(sy * cut.info.width + sx) * 4 + 3];
   }
 }
-
-// Match the cutout's tone to the photo (least-squares gain + offset over solid pixels).
-const photo = await sharp(PHOTO).removeAlpha().raw().toBuffer();
-let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+// Keep colour just around the person (so edge filtering stays clean) and leave the rest empty to keep the file small.
+const near = await sharp(alpha, raw(1)).blur(4).extractChannel(0).raw().toBuffer();
+const person = Buffer.alloc(W * H * 4);
 for (let i = 0; i < W * H; i++) {
-  if (person[i * 4 + 3] < 255) continue;
-  for (let c = 0; c < 3; c++) {
-    const x = person[i * 4 + c], y = photo[i * 3 + c];
-    n++; sx += x; sy += y; sxx += x * x; sxy += x * y;
-  }
-}
-const gain = (n * sxy - sx * sy) / (n * sxx - sx * sx);
-const bias = (sy - gain * sx) / n;
-for (let i = 0; i < W * H; i++) {
-  for (let c = 0; c < 3; c++) person[i * 4 + c] = Math.max(0, Math.min(255, Math.round(gain * person[i * 4 + c] + bias)));
-}
-
-// Bleed edge colours under transparent pixels: normalised blur of alpha-weighted colour.
-const weighted = Buffer.alloc(W * H * 3);
-const alpha = Buffer.alloc(W * H);
-for (let i = 0; i < W * H; i++) {
-  const a = person[i * 4 + 3];
-  alpha[i] = a;
-  for (let c = 0; c < 3; c++) weighted[i * 3 + c] = Math.round((person[i * 4 + c] * a) / 255);
-}
-const blurredColour = await sharp(weighted, raw(3)).blur(4).raw().toBuffer();
-const blurredAlpha = await sharp(alpha, raw(1)).blur(4).extractChannel(0).raw().toBuffer();
-for (let i = 0; i < W * H; i++) {
-  if (person[i * 4 + 3] === 255 || blurredAlpha[i] === 0) continue;
-  for (let c = 0; c < 3; c++) {
-    person[i * 4 + c] = Math.min(255, Math.round((blurredColour[i * 3 + c] * 255) / blurredAlpha[i]));
-  }
+  if (!alpha[i] && !near[i]) continue;
+  for (let c = 0; c < 3; c++) person[i * 4 + c] = photo[i * 3 + c];
+  person[i * 4 + 3] = alpha[i];
 }
 await sharp(person, raw(4)).png({ compressionLevel: 9 }).toFile("public/hero/home-person.png");
 
@@ -87,4 +63,4 @@ for (const sigma of [6, 14, 30, 70, 150]) {
 }
 await sharp(plate, raw(3)).jpeg({ quality: 90, mozjpeg: true }).toFile("public/hero/home-plate.jpg");
 
-console.log(`home-person.png + home-plate.jpg written (${W}x${H}, offset ${OFFSET_X},${OFFSET_Y}, tone gain ${gain.toFixed(3)} bias ${bias.toFixed(1)})`);
+console.log(`home-person.png + home-plate.jpg written (${W}x${H}, offset ${OFFSET_X},${OFFSET_Y}) from ${PHOTO}`);
