@@ -8,6 +8,7 @@ import {
   UnifrakturMaguntia,
 } from "next/font/google";
 import { SmoothScrollProvider } from "@/components/smooth-scroll-provider";
+import { SITE_DESCRIPTION, SITE_IMAGE, SITE_TITLE, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({
@@ -49,9 +50,25 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: "Rishabh Diwaker — Video Editor & AI Creator | Bangalore",
-    description:
-      "Video Editor & AI Creator with 5+ years building high-retention content — short-form, brand campaigns, motion graphics, and AI-powered workflows for YouTube, Reels, and digital platforms.",
+    metadataBase: new URL(SITE_URL),
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    alternates: { canonical: "/" },
+    openGraph: {
+      type: "website",
+      url: "/",
+      siteName: "Rishabh Diwaker",
+      title: SITE_TITLE,
+      description: SITE_DESCRIPTION,
+      locale: "en_IN",
+      images: [{ ...SITE_IMAGE, alt: "Rishabh Diwaker, video editor in Bangalore" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: SITE_TITLE,
+      description: SITE_DESCRIPTION,
+      images: [SITE_IMAGE.url],
+    },
     keywords: [
       // Name variations
       "Rishabh Diwaker",
@@ -158,26 +175,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en-IN">
       <head>
         <link rel="preload" as="image" href="/hero/home-bg.jpg" fetchPriority="high" />
       </head>
       <body
         className={`${inter.variable} ${syne.variable} ${spaceMono.variable} ${bungeeOutline.variable} ${unifrakturMaguntia.variable} ${dotGothic16.variable} min-h-screen bg-transparent antialiased`}
       >
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "Person",
-              name: "Rishabh Diwaker",
-              alternateName: "Rishabh Diwakar",
-              datePublished: "2026-04-01",
-              dateModified: "2026-07-07",
-            }),
-          }}
-        />
         <SmoothScrollProvider>{children}</SmoothScrollProvider>
       </body>
     </html>

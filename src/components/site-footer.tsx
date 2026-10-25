@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useCallback, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { SocialLink } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
+import { SITE_LOCATION } from "@/lib/site";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 
 const FOOTER_BG = "#0A0A0A";
@@ -193,6 +194,9 @@ export function SiteFooter({
             <p className="max-w-sm text-sm font-medium leading-relaxed tracking-tight text-white md:text-[0.9375rem]">
               {tagline}
             </p>
+            <address className="text-[10px] font-semibold not-italic uppercase tracking-[0.16em] text-zinc-500">
+              Video editor · {SITE_LOCATION.cityAlt}, {SITE_LOCATION.countryName}
+            </address>
           </div>
 
           <div className="flex flex-col items-start gap-5 md:px-2">

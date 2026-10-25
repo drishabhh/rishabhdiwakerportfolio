@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const SITE_URL = "https://www.rishabhdiwaker.com";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * Sitemap with publish + last-modified dates.
@@ -15,7 +14,7 @@ const SITE_URL = "https://www.rishabhdiwaker.com";
  * at the original launch date.
  */
 const PUBLISHED = new Date("2026-04-01");
-const LAST_MODIFIED = new Date("2026-07-07");
+const LAST_MODIFIED = new Date("2026-10-26");
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
