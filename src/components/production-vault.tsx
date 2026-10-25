@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ACCENT_LABEL, DARK_PANEL } from "@/lib/panel";
 import { Play } from "lucide-react";
 
 import type { VaultPlaylist } from "@/lib/content";
@@ -13,10 +14,10 @@ type ArchiveCardProps = {
 
 function ArchiveCard({ playlist, isDark }: ArchiveCardProps) {
   const shellClass = isDark
-    ? "border border-white/10 bg-[#1A1A1A]/90 ring-1 ring-white/[0.06]"
+    ? `${DARK_PANEL} hover:border-white/[0.18]`
     : "border border-zinc-300/70 bg-gradient-to-br from-white via-zinc-50 to-zinc-100/90 ring-1 ring-zinc-200/80 shadow-[0_10px_40px_-18px_rgba(0,0,0,0.35)]";
   const titleClass = isDark
-    ? "text-white"
+    ? ACCENT_LABEL
     : "text-zinc-950";
   const bodyClass = isDark
     ? "text-zinc-300"
@@ -27,7 +28,7 @@ function ArchiveCard({ playlist, isDark }: ArchiveCardProps) {
 
   return (
     <article
-      className={`group/archive relative h-full overflow-hidden rounded-2xl transition-transform duration-200 ease-out hover:-translate-y-1 ${shellClass}`}
+      className={`group/archive relative h-full overflow-hidden rounded-2xl transition-[transform,translate,border-color,box-shadow] duration-300 ease-out hover:-translate-y-1 ${shellClass}`}
     >
       <Link
         href={playlist.href}

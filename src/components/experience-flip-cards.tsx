@@ -2,6 +2,7 @@
 
 import type { ExperienceRole as ContentExperienceRole } from "@/lib/content";
 import { isEnabled } from "@/lib/content-types";
+import { ACCENT_LABEL, DARK_PANEL_SURFACE } from "@/lib/panel";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { motion } from "framer-motion";
@@ -98,12 +99,12 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
     return (
       <article
         className={`flex min-h-[320px] flex-col rounded-2xl border p-6 shadow-sm md:min-h-[340px] ${
-          isDark ? "border-white/10 bg-[#1A1A1A] text-white" : "border-zinc-200/90 bg-zinc-50 text-zinc-900"
+          isDark ? `${DARK_PANEL_SURFACE} text-white` : "border-zinc-200/90 bg-zinc-50 text-zinc-900"
         }`}
       >
         <p
           className={`text-xs font-medium uppercase tracking-wide ${
-            isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
+            isDark ? ACCENT_LABEL : "text-zinc-500"
           }`}
         >
           {entry.dateRange}
@@ -137,7 +138,7 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
   }
 
   const cardShellClass = isDark
-    ? "border-white/10 bg-[#1A1A1A] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_50px_-28px_rgba(0,0,0,0.45)]"
+    ? DARK_PANEL_SURFACE
     : "border-zinc-200/80 bg-zinc-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_18px_50px_-28px_rgba(0,0,0,0.35)]";
 
   const cardBody = isOpen ? (
@@ -180,7 +181,7 @@ function ExperienceCard({ entry, isDark, isOpen, isDimmed, onOpen, onClose }: Ex
         <div className="min-h-0">
           <p
             className={`pt-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] ${
-              isDark ? "text-white/80 title-glow-opposite-light-text" : "text-zinc-500"
+              isDark ? ACCENT_LABEL : "text-zinc-500"
             }`}
           >
             {entry.dateRange}

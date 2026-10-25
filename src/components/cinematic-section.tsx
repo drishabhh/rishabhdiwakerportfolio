@@ -2,7 +2,8 @@
 
 import { useNativeSectionScrollProgress } from "@/hooks/use-native-scroll-progress";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
-import { motion, useTransform } from "framer-motion";
+import { scrollVelocity } from "@/lib/scroll-velocity";
+import { motion, useSpring, useTransform } from "framer-motion";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type CinematicSectionProps = {
@@ -133,6 +134,12 @@ export function CinematicSection({
     useDepth ? [0.98, 1, 1, 0.99] : [1, 1, 1, 1],
   );
 
+  /* Sections shear slightly with scroll momentum and spring back when the page settles. */
+  const momentumSkew = useSpring(
+    useTransform(scrollVelocity, (v) => Math.max(-2.5, Math.min(2.5, v * 0.06))),
+    { stiffness: 300, damping: 30 },
+  );
+
   const Component = as === "div" ? motion.div : motion.section;
 
   if (!motionEnabled || isMobile) {
@@ -153,6 +160,7 @@ export function CinematicSection({
         y: depthY,
         z: depthZ,
         scale: depthScale,
+        skewY: momentumSkew,
         transformPerspective: 1400,
         transformStyle: "preserve-3d",
       }}
@@ -174,9 +182,12 @@ export function CinematicSection({
               opacity: revealOpacity,
               y: revealY,
               scale: revealScale,
+              skewY: useDepth ? undefined : momentumSkew,
               willChange: "transform, opacity",
             }
-          : undefined
+          : useDepth
+            ? undefined
+            : { skewY: momentumSkew }
       }
     >
       {divider ? <SectionDivider /> : null}

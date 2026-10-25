@@ -35,19 +35,25 @@ class WebGLErrorBoundary extends Component<
 
 export type HeroBackgroundProps = {
   desktopSrc: string;
+  /** Depth map aligned with desktopSrc, for the WebGL layer's 2.5D parallax. */
+  depthSrc: string;
   mobileSrc: string;
   mobileObjectPosition: string;
   desktopObjectPosition?: string;
   hidden?: boolean;
+  /** Stop rendering WebGL frames while the layer is covered (e.g. by the dark section canvas). */
+  paused?: boolean;
   useWebGL: boolean;
 };
 
 export function HeroBackground({
   desktopSrc,
+  depthSrc,
   mobileSrc,
   mobileObjectPosition,
   desktopObjectPosition = "center",
   hidden = false,
+  paused = false,
   useWebGL,
 }: HeroBackgroundProps) {
   const reduced = useReducedMotionSafe();
@@ -109,8 +115,10 @@ export function HeroBackground({
         >
           <HeroWebGLScene
             imageSrc={desktopSrc}
+            depthSrc={depthSrc}
             objectPosition={desktopObjectPosition}
             hidden={hidden}
+            paused={paused}
             ready={webglReady}
             revealed={webglRevealed}
             interactive={crossfadeDone}

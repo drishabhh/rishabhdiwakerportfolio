@@ -1,6 +1,7 @@
 "use client";
 
 import type { SkillBlock } from "@/lib/content";
+import { DARK_PANEL, DARK_PANEL_HOVER } from "@/lib/panel";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
@@ -11,8 +12,8 @@ const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const paperSpring = { type: "spring" as const, stiffness: 220, damping: 26, mass: 0.9 };
 
 /** Dark / light: match site `cardSurface` — #1A1A1A + white/10 border; light = white + zinc-200. */
-const NOTE_PANEL_DIM_DARK = "border border-white/10 bg-[#1A1A1A]";
-const NOTE_PANEL_HOVER_DARK = "border border-white/[0.16] bg-[#222222]";
+const NOTE_PANEL_DIM_DARK = DARK_PANEL;
+const NOTE_PANEL_HOVER_DARK = DARK_PANEL_HOVER;
 const NOTE_TAPE_DIM_DARK = "from-white/[0.12] via-white/[0.06] to-white/[0.12]";
 const NOTE_TAPE_HOVER_DARK = "from-white/[0.16] via-white/[0.08] to-white/[0.16]";
 
@@ -271,7 +272,7 @@ export function SkillsTagCloud({
             >
               <span
                 className={`mb-2 block select-none font-mono text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.04em] md:text-[2rem] ${
-                  isDark ? "text-white/20" : "text-zinc-900/55"
+                  isDark ? "text-orange-400/80 [text-shadow:0_0_18px_rgba(251,146,60,0.55)]" : "text-zinc-900/55"
                 }`}
                 aria-hidden
               >

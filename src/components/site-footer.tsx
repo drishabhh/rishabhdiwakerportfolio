@@ -2,7 +2,7 @@
 
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import Image from "next/image";
-import { useCallback, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { SocialLink } from "@/lib/content";
 import { SECTION_TITLE_ON_HERO } from "@/lib/section-title";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
@@ -71,6 +71,8 @@ export type SiteFooterProps = {
   email: string;
   socials: SocialLink[];
   sectionTitleClass?: string;
+  /** Optional scene marker shown above the heading. */
+  slate?: ReactNode;
 };
 
 export function SiteFooter({
@@ -80,6 +82,7 @@ export function SiteFooter({
   email,
   socials,
   sectionTitleClass = SECTION_TITLE_ON_HERO,
+  slate,
 }: SiteFooterProps) {
   const reduced = useReducedMotionSafe();
   const rootRef = useRef<HTMLElement>(null);
@@ -119,7 +122,7 @@ export function SiteFooter({
       onMouseMove={paint}
       onMouseLeave={clearPointer}
       style={{ backgroundColor: FOOTER_BG, ...baseStyle }}
-      className="relative isolate scroll-mt-28 overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-28 pt-14 text-white md:pb-32 md:pt-16"
+      className="relative isolate z-10 scroll-mt-28 overflow-hidden border-t border-white/[0.05] bg-[#0A0A0A] pb-28 pt-14 text-white md:pb-32 md:pt-16"
     >
       {/* Flashlight — brighter neutral so white copy reads as the beam passes */}
       <motion.div
@@ -164,6 +167,7 @@ export function SiteFooter({
       </div>
 
       <div className="relative z-10 mx-auto max-w-6xl px-6 md:px-10">
+        {slate ? <div className="mb-4">{slate}</div> : null}
         <h2 id="contact-heading" className={`mb-10 md:mb-12 ${sectionTitleClass}`}>
           Contact
         </h2>

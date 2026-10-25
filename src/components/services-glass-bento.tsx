@@ -1,6 +1,7 @@
 "use client";
 
 import type { ServiceItem } from "@/lib/content";
+import { DARK_PANEL } from "@/lib/panel";
 import { LayoutGroup, motion, type Variants } from "framer-motion";
 import { useCallback, type CSSProperties, type MouseEvent, type SVGProps } from "react";
 
@@ -246,12 +247,12 @@ export function ServicesGlassBento({
   title,
   services,
 }: ServicesGlassBentoProps) {
-  const indexClass = isDark ? "text-zinc-600" : "text-zinc-300";
+  const indexClass = isDark ? "text-orange-400/35 [text-shadow:0_0_28px_rgba(251,146,60,0.5)]" : "text-zinc-300";
   const iconBoxClass = isDark
     ? "bg-zinc-800 text-zinc-100 ring-1 ring-white/10"
     : "bg-zinc-100 text-zinc-800 ring-1 ring-zinc-300/80";
   const glassContentClass = isDark
-    ? "border border-white/10 bg-[#1A1A1A]/76 backdrop-blur-2xl ring-1 ring-white/[0.06]"
+    ? DARK_PANEL
     : "border border-zinc-200/90 bg-white/78 backdrop-blur-2xl ring-1 ring-zinc-300/45";
 
   const serviceRows: Array<Array<{ svc: ServiceEntry; baseFlex: number }>> = [

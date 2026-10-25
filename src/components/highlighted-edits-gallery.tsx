@@ -6,6 +6,7 @@ import { youtubeVideoIdFromUrl } from "@/lib/youtube";
 import { vimeoEmbedSrc, vimeoFromUrl, vimeoThumbnailFromUrl } from "@/lib/vimeo";
 import { mediaSrcFromBlob } from "@/lib/blob-media";
 import { customHighlightPoster } from "@/lib/highlight-frames";
+import { scrollVelocity } from "@/lib/scroll-velocity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -647,6 +648,8 @@ function HighlightCard({
   return (
     <div
       ref={cardRef}
+      data-active={isActive || undefined}
+      data-cinema={cinemaMode || undefined}
       onPointerEnter={onPointerEnterCard}
       onPointerLeave={onPointerLeaveCard}
       className={`${cinemaMode ? cinemaShellClass : desktopMarquee ? desktopMarqueeShellClass : railShellClass} fullscreen:flex fullscreen:h-dvh fullscreen:w-dvw fullscreen:max-w-none fullscreen:items-center fullscreen:justify-center fullscreen:rounded-none fullscreen:bg-black`}
@@ -923,6 +926,11 @@ const CARD_GAP = 16;
 const DEFAULT_CARD_STEP = 220 + CARD_GAP;
 const MARQUEE_SPEED_PX_PER_SEC = 72;
 const MARQUEE_DRAG_THRESHOLD_PX = 6;
+/* 3D reel: desktop cards ride a drum whose radius is a share of the container width. */
+const REEL_RADIUS_SHARE = 0.62;
+/** Radians from the front where cards finish fading out behind the drum. */
+const REEL_MAX_ANGLE = 1.35;
+const REEL_LIFT_PX = 70;
 
 type StripId = "a" | "b";
 
@@ -1016,10 +1024,10 @@ function HighlightRail({
       />
       <div
         ref={railRef}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="reel-rail flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => (
-          <div key={`${item.href ?? item.title}-${index}`} data-card className="shrink-0">
+          <div key={`${item.href ?? item.title}-${index}`} data-card className="reel-rail-card shrink-0">
             <HighlightCard
               item={item}
               index={index}
@@ -1066,6 +1074,12 @@ function DesktopMarquee({
   const dragStartXRef = useRef(0);
   const dragStartOffsetRef = useRef(0);
   const slotExpandedRef = useRef<Record<string, boolean>>({});
+  const containerWidthRef = useRef(0);
+  const cardWidthRef = useRef(DEFAULT_CARD_STEP - CARD_GAP);
+  const cardsRef = useRef<HTMLElement[]>([]);
+  const liftRef = useRef<number[]>([]);
+  const hoveredCardRef = useRef(-1);
+  const activeCardRef = useRef(-1);
 
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
@@ -1079,10 +1093,14 @@ function DesktopMarquee({
     if (!track) return;
 
     const measure = () => {
-      const first = track.querySelector<HTMLElement>("[data-marquee-card]");
+      cardsRef.current = Array.from(track.querySelectorAll<HTMLElement>("[data-marquee-card]"));
+      containerWidthRef.current = containerRef.current?.clientWidth ?? 0;
+      const first = cardsRef.current[0];
       if (!first) return;
-      const width = first.getBoundingClientRect().width;
+      /* offsetWidth, not getBoundingClientRect: the reel's 3D transforms change the drawn size. */
+      const width = first.offsetWidth;
       if (width > 0) {
+        cardWidthRef.current = width;
         cardStepRef.current = width + CARD_GAP;
         cycleLenRef.current = Math.max(itemCount * cardStepRef.current, 1);
       }
@@ -1091,6 +1109,7 @@ function DesktopMarquee({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(track);
+    if (containerRef.current) ro.observe(containerRef.current);
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
@@ -1121,6 +1140,11 @@ function DesktopMarquee({
     speedTargetRef.current = hoveredRef.current && activeSlot === null ? 0 : 1;
   }, [activeSlot, playbackPaused]);
 
+  useEffect(() => {
+    const parsed = activeSlot ? parseMarqueeSlot(activeSlot) : null;
+    activeCardRef.current = parsed ? (parsed.strip === "b" ? itemCount : 0) + parsed.index : -1;
+  }, [activeSlot, itemCount]);
+
   const syncAutoScrollTarget = useCallback(() => {
     if (activeSlot !== null && !playbackPaused) {
       speedTargetRef.current = 0;
@@ -1147,6 +1171,37 @@ function DesktopMarquee({
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
+    let lastOffset = offsetRef.current;
+    let tilt = 0;
+    let lean = 0;
+
+    /* Places each card on the drum from the track offset alone — no layout reads per frame. */
+    const placeReelCards = (ease: number) => {
+      const containerWidth = containerWidthRef.current;
+      if (containerWidth <= 0) return;
+      const radius = containerWidth * REEL_RADIUS_SHARE;
+      const step = cardStepRef.current;
+      const half = cardWidthRef.current / 2;
+      const lifts = liftRef.current;
+      cardsRef.current.forEach((card, k) => {
+        const x = k * step + half - offsetRef.current - containerWidth / 2;
+        const theta = x / radius;
+        const fade = Math.min(1, Math.max(0, (Math.abs(theta) - (REEL_MAX_ANGLE - 0.35)) / 0.35));
+        if (fade >= 1) {
+          if (card.style.visibility !== "hidden") card.style.visibility = "hidden";
+          return;
+        }
+        if (card.style.visibility) card.style.visibility = "";
+        const active = k === activeCardRef.current;
+        const lift = (lifts[k] ?? 0) + ((active || k === hoveredCardRef.current ? 1 : 0) - (lifts[k] ?? 0)) * ease;
+        lifts[k] = lift;
+        const angle = active ? 0 : theta * (1 - 0.4 * lift);
+        const dx = radius * Math.sin(theta) - x;
+        const dz = radius * (Math.cos(theta) - 1) + REEL_LIFT_PX * lift;
+        card.style.transform = `translate3d(${dx.toFixed(1)}px,0,${dz.toFixed(1)}px) rotateY(${angle.toFixed(4)}rad)`;
+        card.style.opacity = (1 - fade).toFixed(3);
+      });
+    };
 
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
@@ -1161,9 +1216,21 @@ function DesktopMarquee({
         );
       }
 
+      // Momentum: the reel tilts with page-scroll speed and leans when it's flung sideways.
+      const cycle = cycleLenRef.current;
+      let moved = offsetRef.current - lastOffset;
+      if (moved > cycle / 2) moved -= cycle;
+      else if (moved < -cycle / 2) moved += cycle;
+      lastOffset = offsetRef.current;
+      const sideways = dt > 0 ? moved / dt - MARQUEE_SPEED_PX_PER_SEC * speedRef.current : 0;
+      const ease = Math.min(1, dt * 8);
+      tilt += (Math.max(-8, Math.min(8, scrollVelocity.get() * 0.12)) - tilt) * ease;
+      lean += (Math.max(-6, Math.min(6, -sideways * 0.004)) - lean) * ease;
+
       if (trackRef.current) {
-        trackRef.current.style.transform = `translate3d(${-offsetRef.current}px,0,0)`;
+        trackRef.current.style.transform = `translate3d(${-offsetRef.current}px,0,0) rotateX(${tilt.toFixed(2)}deg) skewX(${lean.toFixed(2)}deg)`;
       }
+      placeReelCards(Math.min(1, dt * 10));
       raf = requestAnimationFrame(tick);
     };
 
@@ -1221,8 +1288,19 @@ function DesktopMarquee({
   const strip = (copyKey: StripId) =>
     items.map((item, i) => {
       const slot = marqueeSlot(copyKey, i);
+      const reelIndex = (copyKey === "b" ? itemCount : 0) + i;
       return (
-        <div key={`${copyKey}-${item.href ?? item.title}-${i}`} data-marquee-card className="shrink-0">
+        <div
+          key={`${copyKey}-${item.href ?? item.title}-${i}`}
+          data-marquee-card
+          className="shrink-0 will-change-transform"
+          onPointerEnter={() => {
+            hoveredCardRef.current = reelIndex;
+          }}
+          onPointerLeave={() => {
+            if (hoveredCardRef.current === reelIndex) hoveredCardRef.current = -1;
+          }}
+        >
           <HighlightCard
             item={item}
             index={i}
@@ -1256,7 +1334,9 @@ function DesktopMarquee({
 
       <div
         ref={containerRef}
-        className={`relative w-full overflow-hidden py-4 select-none ${
+        /* Perspective root for the drum. */
+        style={{ perspective: 1600 }}
+        className={`relative w-full overflow-hidden pt-6 pb-14 select-none ${
           marqueeDragBlocked ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
         onMouseEnter={() => {
@@ -1314,7 +1394,12 @@ function DesktopMarquee({
           syncAutoScrollTarget();
         }}
       >
-        <div ref={trackRef} className="flex gap-4 will-change-transform">
+        {/* Floor light pool that grounds the drum (static gradient, nothing per frame). */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-[10%] bottom-0 h-28 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.16),rgba(255,255,255,0.04)_45%,transparent_72%)]"
+        />
+        <div ref={trackRef} className="flex gap-4 will-change-transform" style={{ transformStyle: "preserve-3d" }}>
           {strip("a")}
           {strip("b")}
         </div>

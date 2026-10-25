@@ -21,36 +21,6 @@
   text-shadow: var(--title-glow-opposite-dark-text);
 }
 
-.dock-nav-active {
-  position: relative;
-  z-index: 2;
-  color: #09090b !important;
-  font-weight: 600;
-}
-
-.dock-nav-active svg {
-  color: #09090b !important;
-  stroke: #09090b !important;
-}
-
-.dock-nav-inactive-dark {
-  color: rgba(244, 244, 245, 0.96) !important;
-}
-
-.dock-nav-inactive-dark svg {
-  color: rgba(244, 244, 245, 0.96) !important;
-  stroke: rgba(244, 244, 245, 0.96) !important;
-}
-
-.dock-nav-inactive-light {
-  color: rgba(39, 39, 42, 0.96) !important;
-}
-
-.dock-nav-inactive-light svg {
-  color: rgba(39, 39, 42, 0.96) !important;
-  stroke: rgba(39, 39, 42, 0.96) !important;
-}
-
 html.lenis,
 html.lenis body {
   height: auto;
@@ -89,6 +59,38 @@ html.lenis body {
 @media (prefers-reduced-motion: reduce) {
   .scroll-3d-stage {
     perspective: none;
+  }
+}
+
+/* Mobile rail: cards curve as they scroll past, driven by the browser's scroll timeline (no JS). */
+.reel-rail {
+  perspective: 900px;
+}
+
+@supports (animation-timeline: view()) {
+  .reel-rail-card {
+    animation: reel-rail-tilt linear both;
+    animation-timeline: view(inline);
+  }
+
+  /* Cinema mode is position:fixed — a transformed parent would trap it inside the card. */
+  .reel-rail-card:has([data-cinema]) {
+    animation: none;
+  }
+}
+
+@keyframes reel-rail-tilt {
+  0% {
+    transform: rotateY(32deg) scale(0.88);
+    opacity: 0.55;
+  }
+  50% {
+    transform: none;
+    opacity: 1;
+  }
+  100% {
+    transform: rotateY(-32deg) scale(0.88);
+    opacity: 0.55;
   }
 }
 

@@ -25,7 +25,10 @@ export function navScrollDuration(distancePx: number): number {
 
 const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
 
-/** Calls `onIntent` once when the user starts scrolling by hand (wheel, touch, or scroll keys). */
+/**
+ * Calls `onIntent` once when the user takes over scrolling (wheel, touch, a press such as
+ * scrubbing the timeline, or scroll keys).
+ */
 export function onUserScrollIntent(onIntent: () => void): () => void {
   const fire = () => {
     stop();
@@ -37,10 +40,12 @@ export function onUserScrollIntent(onIntent: () => void): () => void {
   const stop = () => {
     window.removeEventListener("wheel", fire);
     window.removeEventListener("touchstart", fire);
+    window.removeEventListener("pointerdown", fire);
     window.removeEventListener("keydown", onKey);
   };
   window.addEventListener("wheel", fire, { passive: true });
   window.addEventListener("touchstart", fire, { passive: true });
+  window.addEventListener("pointerdown", fire, { passive: true });
   window.addEventListener("keydown", onKey);
   return stop;
 }

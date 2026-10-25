@@ -1,8 +1,10 @@
 "use client";
 
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
-import { motion } from "framer-motion";
+import { motion, useSpring } from "framer-motion";
 import { Play } from "lucide-react";
+
+const magnetSpring = { stiffness: 220, damping: 16, mass: 0.6 };
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -15,6 +17,9 @@ export type HeroCtaProps = {
 
 export function HeroCta({ label, href, visible, onHoverChange }: HeroCtaProps) {
   const reduced = useReducedMotionSafe();
+  /* Magnetic pull toward the pointer while hovering. */
+  const pullX = useSpring(0, magnetSpring);
+  const pullY = useSpring(0, magnetSpring);
 
   if (!href.trim()) return null;
 
@@ -38,8 +43,19 @@ export function HeroCta({ label, href, visible, onHoverChange }: HeroCtaProps) {
           : { duration: 0.55, delay: visible ? 0.72 : 0, ease: cinematicEase }
       }
       className="group pointer-events-auto mt-0 inline-flex w-fit items-center gap-1 rounded-full border border-white/45 bg-zinc-950/55 px-2 py-1.5 text-[10px] font-semibold tracking-tight text-white shadow-[0_6px_18px_rgba(0,0,0,0.68),0_14px_34px_rgba(0,0,0,0.55),0_24px_52px_rgba(0,0,0,0.4),0_36px_72px_rgba(0,0,0,0.24)] backdrop-blur-xl transition-[transform,box-shadow,background-color,border-color] duration-200 hover:-translate-y-1 hover:border-orange-400/55 hover:bg-zinc-900/65 hover:shadow-[0_10px_26px_rgba(0,0,0,0.62),0_20px_48px_rgba(0,0,0,0.48),0_32px_68px_rgba(255,77,0,0.22)] max-md:shadow-[0_6px_18px_rgba(0,0,0,0.68),0_14px_34px_rgba(0,0,0,0.55),0_24px_52px_rgba(0,0,0,0.4),0_36px_72px_rgba(0,0,0,0.24)] max-md:hover:shadow-[0_10px_26px_rgba(0,0,0,0.62),0_20px_48px_rgba(0,0,0,0.48),0_32px_68px_rgba(255,77,0,0.22)] tall:gap-3 tall:border-white/30 tall:bg-white/10 tall:px-6 tall:py-3 tall:text-[0.9375rem] tall:tracking-wide tall:hover:bg-orange-500/20 md:gap-3 md:border-white/30 md:bg-white/10 md:px-6 md:py-3 md:text-[0.9375rem] md:tracking-wide md:shadow-[0_10px_36px_rgba(0,0,0,0.28)] md:hover:bg-orange-500/20 md:hover:shadow-[0_14px_44px_rgba(255,77,0,0.38)]"
+      style={{ x: pullX, y: pullY }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== "mouse") return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        pullX.set((event.clientX - (rect.left + rect.width / 2)) * 0.35);
+        pullY.set((event.clientY - (rect.top + rect.height / 2)) * 0.45);
+      }}
       onMouseEnter={() => onHoverChange?.(true)}
-      onMouseLeave={() => onHoverChange?.(false)}
+      onMouseLeave={() => {
+        pullX.set(0);
+        pullY.set(0);
+        onHoverChange?.(false);
+      }}
       onFocus={() => onHoverChange?.(true)}
       onBlur={() => onHoverChange?.(false)}
     >

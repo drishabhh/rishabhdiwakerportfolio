@@ -2,7 +2,13 @@
 
 import { HeaderRoleTicker } from "@/components/header-role-ticker";
 import { HeroBackground } from "@/components/hero-background";
+import { CameraHud } from "@/components/camera-hud";
+import { CinemaCanvas } from "@/components/cinema-canvas";
 import { CinematicSection } from "@/components/cinematic-section";
+import { EditTimeline } from "@/components/edit-timeline";
+import { SceneSlate } from "@/components/scene-slate";
+import { ScrollTapes } from "@/components/scroll-tapes";
+import { SectionCut } from "@/components/section-cut";
 import { TextLoop } from "@/components/text-loop";
 import { HeroCta } from "@/components/hero-cta";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
@@ -23,12 +29,15 @@ import { sortedHighlights } from "@/lib/highlight-order";
 import { highlightThumbnailFromUrl } from "@/lib/vimeo";
 import { customHighlightPoster } from "@/lib/highlight-frames";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
-import { motion, useSpring } from "framer-motion";
+import { ACCENT_LABEL, DARK_PANEL_SURFACE } from "@/lib/panel";
+import { usePerfTier } from "@/lib/perf-tier";
+import { motion } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
 import {
   Archive,
   Briefcase,
+  Clapperboard,
   FileText,
   House,
   LayoutGrid,
@@ -38,7 +47,7 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /* Scroll flips activeTab / hero overlay state as you leave the hero; memoized sections
    skip those re-renders (their props are stable), which keeps the first scroll hitch-free. */
@@ -48,6 +57,16 @@ const ProductionVault = memo(ProductionVaultBase);
 const ServicesGlassBento = memo(ServicesGlassBentoBase);
 const SiteFooter = memo(SiteFooterBase);
 const SkillsTagCloud = memo(SkillsTagCloudBase);
+
+/* Words on the scroll-driven tapes (components/scroll-tapes.tsx): front = film strip, back = orange band. */
+const TAPES_INTRO = {
+  front: ["Editing", "Color Grading", "Sound Design", "Motion Graphics", "AI Workflows", "Storytelling"],
+  back: ["Available for projects", "Short-form", "Brand films", "Podcasts", "Trailers"],
+} as const;
+const TAPES_OUTRO = {
+  front: ["Let's create", "Get in touch", "Import", "Magic", "Export"],
+  back: ["Reels", "Shorts", "Teasers", "Campaigns", "Documentaries"],
+} as const;
 
 const HEADER_SOCIALS = [
   {
@@ -87,8 +106,6 @@ const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const sectionEnterMs = 1.12;
 
 const sectionScrollOffset = 112;
-
-const navPillSpring = { stiffness: 220, damping: 30, mass: 0.9 };
 
 const heroDissolveShow = {
   opacity: 1,
@@ -151,6 +168,8 @@ const navItems = [
 ] as const;
 
 const HOME_BG = "/hero/home-bg.jpg";
+/** Depth map for HOME_BG's 2.5D parallax — regenerate with scripts/build-hero-depth.mjs. */
+const HOME_BG_DEPTH = "/hero/home-depth.png";
 const HOME_BG_MOBILE = "/hero/home-bg.jpg";
 const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
 const HOME_BG_OBJECT_POSITION_DESKTOP = "center";
@@ -164,6 +183,7 @@ export default function HomeClient({ content }: HomeClientProps) {
   const lenis = useLenis();
   const [isMounted, setIsMounted] = useState(false);
   const navReducedMotion = useReducedMotionSafe();
+  const perfTier = usePerfTier();
   const [activeTab, setActiveTab] = useState<(typeof navItems)[number]["id"]>("home");
   const [heroOverlayVisible, setHeroOverlayVisible] = useState(true);
   const [contentElevated, setContentElevated] = useState(false);
@@ -174,69 +194,12 @@ export default function HomeClient({ content }: HomeClientProps) {
   const lastScrollYRef = useRef(0);
   const scrollingUpRef = useRef(false);
   const heroOverlayRef = useRef<HTMLDivElement>(null);
-  const navScrollRef = useRef<HTMLDivElement>(null);
-  const navButtonRefs = useRef<Partial<Record<(typeof navItems)[number]["id"], HTMLButtonElement>>>({});
-  const navPillReadyRef = useRef(false);
-  const [navPillReady, setNavPillReady] = useState(false);
   const [showreelHover, setShowreelHover] = useState(false);
+  /** True once the dark section canvas fully covers the hero photo. */
+  const [backdropCovered, setBackdropCovered] = useState(false);
   const [cvLoading, setCvLoading] = useState(false);
   const [cvToastVisible, setCvToastVisible] = useState(false);
   const cvToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pillLeft = useSpring(0, navPillSpring);
-  const pillWidth = useSpring(48, navPillSpring);
-
-  const syncNavPill = useCallback(() => {
-    const container = navScrollRef.current;
-    const button = navButtonRefs.current[activeTab];
-    if (!container || !button) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    const left = buttonRect.left - containerRect.left + container.scrollLeft;
-    const width = buttonRect.width;
-
-    if (!navPillReadyRef.current) {
-      pillLeft.jump(left);
-      pillWidth.jump(width);
-      navPillReadyRef.current = true;
-      setNavPillReady(true);
-      return;
-    }
-
-    pillLeft.set(left);
-    pillWidth.set(width);
-  }, [activeTab, pillLeft, pillWidth]);
-
-  useLayoutEffect(() => {
-    syncNavPill();
-
-    const container = navScrollRef.current;
-    const button = navButtonRefs.current[activeTab];
-
-    if (navPillReadyRef.current && button) {
-      button.scrollIntoView({
-        behavior: "auto",
-        inline: "center",
-        block: "nearest",
-      });
-    }
-
-    requestAnimationFrame(syncNavPill);
-
-    if (!container) return;
-
-    const onNavScroll = () => syncNavPill();
-    container.addEventListener("scroll", onNavScroll, { passive: true });
-    const ro = new ResizeObserver(() => syncNavPill());
-    ro.observe(container);
-    window.addEventListener("resize", syncNavPill);
-
-    return () => {
-      container.removeEventListener("scroll", onNavScroll);
-      ro.disconnect();
-      window.removeEventListener("resize", syncNavPill);
-    };
-  }, [activeTab, navReducedMotion, syncNavPill]);
 
   const highlightedEdits: HighlightEditItem[] = useMemo(
     () =>
@@ -299,6 +262,12 @@ export default function HomeClient({ content }: HomeClientProps) {
     ],
   );
 
+  /** Film-slate marker for a section, numbered like its clip on the timeline. */
+  const slateFor = (id: (typeof navItems)[number]["id"]) => {
+    const scene = visibleNavItems.findIndex((item) => item.id === id);
+    return scene > 0 ? <SceneSlate scene={scene} label={visibleNavItems[scene].label} /> : null;
+  };
+
   const heroTaglineVariants = useMemo(
     () =>
       navReducedMotion
@@ -326,37 +295,27 @@ export default function HomeClient({ content }: HomeClientProps) {
     setIsMounted(true);
   }, []);
 
-  const isDark = false;
+  const isDark = true;
   /** Section titles on the full-bleed hero (always light type). */
   const headingClass = "text-white title-glow-opposite-light-text";
   const sectionHeadingClass = SECTION_TITLE_ON_HERO;
   /** Shared white tone + glow for hero copy (combine with each block’s own size/weight). */
   const subheadingClass = "text-white/95 title-glow-opposite-light-text [text-shadow:0_1px_3px_rgba(0,0,0,0.82)]";
   /** Theme toggle only swaps card shells; interiors follow for contrast. */
-  const cardSurfaceClass = isDark ? "border-white/10 bg-[#1A1A1A]" : "border-zinc-200 bg-white";
+  const cardSurfaceClass = isDark ? DARK_PANEL_SURFACE : "border-zinc-200 bg-white";
   const cardSubheadingClass = isDark
-    ? `text-xs font-semibold uppercase tracking-[0.14em] md:text-[0.8125rem] ${subheadingClass}`
+    ? `text-xs font-semibold uppercase tracking-[0.14em] md:text-[0.8125rem] ${ACCENT_LABEL}`
     : "text-xs font-semibold uppercase tracking-[0.14em] text-zinc-800 md:text-[0.8125rem]";
   const cardMutedClass = isDark ? "text-zinc-300" : "text-zinc-600";
   /** Service card titles on glass (dark vs light glass). */
   const cardTitleClass = isDark ? headingClass : "text-zinc-950 title-glow-opposite-dark-text";
-  const useHeroWebGL = isMounted && !isMobileView && !navReducedMotion;
+  /* The depth-shader hero runs only while frames keep up; slower GPUs fall back to the CSS photo layer. */
+  const useHeroWebGL = isMounted && !isMobileView && perfTier === "full";
   /** Header row (theme-aware). */
   const headerSurfaceClass = isDark
-    ? "border-b border-white/10 bg-[#0A0A0A]/80 backdrop-blur-md"
+    ? "bg-[#0b0b0d]/95 shadow-[0_12px_30px_-14px_rgba(0,0,0,0.85)]"
     : "border-b border-zinc-200/90 bg-white/85 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]";
   const headerNameClass = isDark ? headingClass : "text-zinc-950 title-glow-opposite-dark-text";
-  const dockShellClass = isDark
-    ? "border border-white/20 bg-zinc-950/30 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-2xl backdrop-saturate-150"
-    : "border border-white/55 bg-white/28 shadow-[0_12px_40px_-10px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-150";
-  const dockPillClass = isDark
-    ? "bg-white/28 shadow-[inset_0_1px_1px_rgba(255,255,255,0.28)] ring-1 ring-white/20 backdrop-blur-md"
-    : "bg-white/72 shadow-[inset_0_1px_1px_rgba(255,255,255,0.92)] ring-1 ring-white/80 backdrop-blur-md";
-  const inactiveDockClass = isDark ? "dock-nav-inactive-dark" : "dock-nav-inactive-light";
-  const dockActiveGlowClass = isDark
-    ? "shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_26px_12px_rgba(253,224,71,0.22),0_0_52px_20px_rgba(249,115,22,0.12)]"
-    : "shadow-[0_0_0_1px_rgba(251,146,60,0.35),0_0_22px_10px_rgba(251,191,36,0.32),0_0_44px_18px_rgba(234,88,12,0.14)]";
-
   const handleCvDownload = useCallback(async () => {
     if (cvLoading) return;
 
@@ -438,7 +397,9 @@ export default function HomeClient({ content }: HomeClientProps) {
     }
 
     const footer = document.getElementById("colophon");
-    if (footer && footer.getBoundingClientRect().top <= anchorLine + (isMobile ? 20 : 40)) {
+    /* The footer can be too short to reach the anchor line, so the page bottom counts as Contact too. */
+    const atPageBottom = scrollY >= document.documentElement.scrollHeight - innerHeight - 4;
+    if (footer && (footer.getBoundingClientRect().top <= anchorLine + (isMobile ? 20 : 40) || atPageBottom)) {
       next = "contact";
     }
 
@@ -632,11 +593,14 @@ export default function HomeClient({ content }: HomeClientProps) {
     >
       <HeroBackground
         desktopSrc={HOME_BG}
+        depthSrc={HOME_BG_DEPTH}
         mobileSrc={HOME_BG_MOBILE}
         mobileObjectPosition={HOME_BG_OBJECT_POSITION_MOBILE}
         desktopObjectPosition={HOME_BG_OBJECT_POSITION_DESKTOP}
         useWebGL={useHeroWebGL}
+        paused={backdropCovered}
       />
+      <CinemaCanvas onCoveredChange={setBackdropCovered} />
 
       {isEnabled(content.header.enabled) ? (
       <motion.header
@@ -646,28 +610,41 @@ export default function HomeClient({ content }: HomeClientProps) {
         transition={{ duration: sectionEnterMs, ease: cinematicEase }}
         className={`fixed left-0 right-0 top-0 z-50 ${headerSurfaceClass}`}
       >
-        <div className="mx-auto flex min-h-[52px] max-w-6xl items-center justify-between gap-2 px-4 py-2 sm:gap-3 sm:px-6 md:min-h-[52px] md:px-10 md:py-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-0 pr-2 leading-none">
-            <span className={`truncate text-xs font-bold sm:text-sm ${headerNameClass}`}>
-              {content.header.name}
+        {/* Film-frame edge: an orange hairline over a strip of sprocket holes. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-[5px] h-px bg-gradient-to-r from-transparent via-orange-400/60 to-transparent"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[4px] bg-[repeating-linear-gradient(90deg,rgba(255,255,255,0.13)_0_7px,transparent_7px_15px)]"
+        />
+        <div className="relative mx-auto flex min-h-[52px] max-w-6xl items-center justify-between gap-2 px-4 pb-2 pt-1.5 sm:gap-3 sm:px-6 md:px-10">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 pr-2">
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-orange-400/40 bg-orange-500/10 text-orange-300 shadow-[0_0_14px_-4px_rgba(251,146,60,0.7)]"
+            >
+              <Clapperboard className="h-3.5 w-3.5" />
             </span>
-            <div className="min-w-0 max-w-full overflow-hidden">
-              <HeaderRoleTicker
-                tagline={content.header.tagline}
-                className={`text-[9px] font-medium uppercase tracking-[0.12em] opacity-70 sm:text-[10px] sm:tracking-[0.14em] ${
-                  isDark ? "text-zinc-400" : "text-zinc-600"
-                }`}
-              />
+            <div className="flex min-w-0 flex-col gap-0.5 leading-none">
+              <span className={`truncate text-xs font-bold sm:text-sm ${headerNameClass}`}>
+                {content.header.name}
+              </span>
+              <div className="min-w-0 max-w-full overflow-hidden">
+                <HeaderRoleTicker
+                  tagline={content.header.tagline}
+                  className={`text-[9px] font-medium uppercase tracking-[0.12em] opacity-70 sm:text-[10px] sm:tracking-[0.14em] ${
+                    isDark ? "text-zinc-400" : "text-zinc-600"
+                  }`}
+                />
+              </div>
             </div>
           </div>
-          <div className={`flex shrink-0 items-center gap-1 text-sm sm:gap-2 md:gap-3 ${cardMutedClass}`}>
-            <span
-              className={`hidden rounded-full border px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] sm:inline-flex sm:px-3 sm:py-1 sm:text-[10px] sm:tracking-[0.14em] ${
-                isDark
-                  ? "border-emerald-300/50 bg-emerald-500/15 text-emerald-300"
-                  : "border-emerald-600/35 bg-emerald-500/10 text-emerald-800"
-              }`}
-            >
+          <CameraHud className="hidden shrink-0 lg:flex" />
+          <div className={`flex flex-1 items-center justify-end gap-1 text-sm sm:gap-2 md:gap-3 ${cardMutedClass}`}>
+            <span className="hidden items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-300 shadow-[0_0_14px_-4px_rgba(16,185,129,0.6)] sm:inline-flex sm:px-3 sm:text-[10px]">
+              <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
               {content.header.statusLabel}
             </span>
             {HEADER_SOCIALS.map(({ href, label, Icon }) => (
@@ -679,7 +656,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                 aria-label={label}
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors duration-200 sm:h-8 sm:w-8 ${
                   isDark
-                    ? "text-zinc-300 hover:bg-white/10 hover:text-white"
+                    ? "text-zinc-300 hover:bg-orange-500/10 hover:text-orange-300"
                     : "text-zinc-600 hover:bg-zinc-900/5 hover:text-zinc-950"
                 }`}
               >
@@ -849,6 +826,8 @@ export default function HomeClient({ content }: HomeClientProps) {
       </motion.div>
       ) : null}
 
+      <ScrollTapes front={TAPES_INTRO.front} back={TAPES_INTRO.back} />
+
       <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 pt-8 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
         {isEnabled(content.summary.enabled) ? (
         <CinematicSection
@@ -858,16 +837,17 @@ export default function HomeClient({ content }: HomeClientProps) {
           className="scroll-mt-28 flex flex-col gap-10 pt-2 md:gap-14 md:pt-4"
         >
           <div id="summary-bio" className="scroll-mt-28">
+            <div className="mb-4">{slateFor("summary")}</div>
             <h2 className={sectionHeadingClass}>{content.summary.title}</h2>
           </div>
           <div className="grid gap-5 md:grid-cols-2 md:gap-6">
-            <div className={`rounded-2xl border p-6 ${cardSurfaceClass}`}>
+            <div className={`rounded-2xl border p-6 transition-[border-color,box-shadow] duration-300 ${cardSurfaceClass}`}>
               <p className={cardSubheadingClass}>Professional Profile</p>
               <p className={`mt-3 text-sm leading-relaxed md:text-base ${cardMutedClass}`}>
                 {content.summary.professionalProfile}
               </p>
             </div>
-            <div className={`rounded-2xl border p-6 ${cardSurfaceClass}`}>
+            <div className={`rounded-2xl border p-6 transition-[border-color,box-shadow] duration-300 ${cardSurfaceClass}`}>
               <p className={cardSubheadingClass}>Core Philosophy</p>
               <p className={`mt-3 text-sm leading-relaxed md:text-base ${cardMutedClass}`}>
                 {content.summary.corePhilosophy}
@@ -880,6 +860,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       {isEnabled(content.highlights.enabled) && highlightedEdits.length > 0 ? (
       <CinematicSection as="div" divider className="relative z-20 scroll-mt-28 w-full">
+        <div className="mx-auto mb-4 w-full max-w-6xl px-6 md:px-10">{slateFor("highlights")}</div>
         <HighlightedEditsGallery
           items={highlightedEdits}
           isDark={isDark}
@@ -888,9 +869,10 @@ export default function HomeClient({ content }: HomeClientProps) {
       </CinematicSection>
       ) : null}
 
-      <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-40 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
+      <div className={`scroll-3d-stage relative isolate mx-auto flex w-full max-w-6xl flex-col gap-20 bg-transparent px-6 pb-24 md:px-10 ${contentElevated ? "z-20" : "z-10"}`}>
         {isEnabled(content.skills.enabled) ? (
         <CinematicSection id="skills" depth="medium" divider className="scroll-mt-28 flex flex-col gap-6 md:gap-8">
+          {slateFor("skills")}
           <SkillsTagCloud
             isDark={isDark}
             headingClass={headingClass}
@@ -905,6 +887,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
         {isEnabled(content.vault.enabled) ? (
         <CinematicSection as="div" divider reveal={false} className="relative z-20 scroll-mt-28">
+          <div className="mb-4">{slateFor("vault")}</div>
           <ProductionVault
             isDark={isDark}
             mutedClass={cardMutedClass}
@@ -919,6 +902,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
         {isEnabled(content.experience.enabled) ? (
         <CinematicSection id="experience" divider reveal={false} className="scroll-mt-28 space-y-6">
+          {slateFor("experience")}
           <h2 className={sectionHeadingClass}>{content.experience.title}</h2>
           <ExperienceFlipCards isDark={isDark} roles={content.experience.roles} />
         </CinematicSection>
@@ -926,6 +910,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
         {isEnabled(content.services.enabled) ? (
         <div className="relative z-20 scroll-mt-28">
+          <div className="mb-4">{slateFor("services")}</div>
           <ServicesGlassBento
           isDark={isDark}
           headingClass={cardTitleClass}
@@ -940,11 +925,7 @@ export default function HomeClient({ content }: HomeClientProps) {
 
       </div>
 
-      {/* Fade fixed hero portrait into footer black so the figure doesn’t hard-cut at the seam */}
-      <div
-        aria-hidden
-        className="pointer-events-none relative z-[11] h-28 w-full bg-gradient-to-b from-transparent via-[#0a0a0a]/75 to-[#0A0A0A] md:h-40 md:via-[#0a0a0a]/82"
-      />
+      <ScrollTapes front={TAPES_OUTRO.front} back={TAPES_OUTRO.back} />
 
       {isEnabled(content.footer.enabled) ? (
       <SiteFooter
@@ -954,73 +935,13 @@ export default function HomeClient({ content }: HomeClientProps) {
         email={content.footer.email}
         socials={footerSocials}
         sectionTitleClass={sectionHeadingClass}
+        slate={slateFor("contact")}
       />
       ) : null}
 
-      <nav className="fixed bottom-[max(2rem,env(safe-area-inset-bottom))] left-1/2 z-[70] max-w-[calc(100vw-1.5rem)] -translate-x-1/2">
-        <div className={`relative overflow-hidden rounded-full ${dockShellClass}`}>
-          <div
-            aria-hidden
-            className={`pointer-events-none absolute inset-0 rounded-full ${
-              isDark
-                ? "bg-gradient-to-b from-white/[0.07] to-transparent"
-                : "bg-gradient-to-b from-white/45 to-white/10"
-            }`}
-          />
-          {!navReducedMotion && navPillReady ? (
-            <>
-              <motion.div
-                aria-hidden
-                className={`pointer-events-none absolute top-2.5 bottom-2.5 z-0 rounded-full bg-transparent ${dockActiveGlowClass}`}
-                style={{ left: pillLeft, width: pillWidth }}
-              />
-              <motion.div
-                aria-hidden
-                className={`pointer-events-none absolute top-2.5 bottom-2.5 z-[1] rounded-full ${dockPillClass}`}
-                style={{ left: pillLeft, width: pillWidth }}
-              />
-            </>
-          ) : null}
-          <div
-            ref={navScrollRef}
-            data-lenis-prevent
-            className="relative z-[2] flex max-w-full flex-nowrap items-center gap-0.5 overflow-x-auto px-3 py-2.5 sm:gap-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-          >
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-
-            return (
-              <button
-                key={item.id}
-                ref={(node) => {
-                  if (node) navButtonRefs.current[item.id] = node;
-                  else delete navButtonRefs.current[item.id];
-                }}
-                type="button"
-                onClick={() => handleNavClick(item.id)}
-                className={`relative z-[2] isolate shrink-0 overflow-visible rounded-full px-3 py-2 text-xs transition-colors duration-200 md:px-4 ${
-                  isActive && navReducedMotion ? dockPillClass : ""
-                } ${isActive ? "dock-nav-active" : inactiveDockClass}`}
-              >
-                <span
-                  className={`relative z-10 flex items-center justify-center gap-1.5 ${
-                    !isActive && activeTab === "home"
-                      ? isDark
-                        ? "drop-shadow-[0_1px_3px_rgba(0,0,0,0.45)]"
-                        : "drop-shadow-[0_1px_2px_rgba(255,255,255,0.65)]"
-                      : ""
-                  }`}
-                >
-                  <Icon size={14} strokeWidth={isActive ? 2.25 : 2} className="shrink-0" aria-hidden />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </span>
-              </button>
-            );
-          })}
-          </div>
-        </div>
-      </nav>
+      <SectionCut cutKey={activeTab} />
+      {/* Section navigation lives in the timeline. */}
+      <EditTimeline clips={visibleNavItems} activeId={activeTab} onSelect={handleNavClick} />
     </motion.main>
   );
 }
