@@ -590,7 +590,7 @@ export default function HomeClient({ content }: HomeClientProps) {
     <motion.main
       initial={false}
       style={{ minHeight: "100vh" }}
-      className="relative isolate min-h-screen bg-transparent"
+      className="relative isolate min-h-screen overflow-x-clip bg-transparent"
     >
       <HeroBackground
         desktopSrc={HOME_BG}
