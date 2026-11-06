@@ -9,7 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
-const HOVER_DWELL_MS = 260;
+/** Hover this long before a reel starts playing (a ring fills on the play icon meanwhile). */
+const HOVER_DWELL_MS = 2000;
 
 type Slot = { left: number; top: number; rotate: number; depth: number; bob: number; lift?: number };
 
@@ -224,6 +225,8 @@ function FloatingTile({
   const pressed = useRef(false);
   const dwell = useRef(0);
   const [hover, setHover] = useState(false);
+  /** True while the 2s hover countdown runs (drives the filling ring). */
+  const [charging, setCharging] = useState(false);
 
   /* cursor parallax per depth (cluster only) */
   const parX = useTransform(px, (v) => v * slot.depth * 2.2);
@@ -248,7 +251,10 @@ function FloatingTile({
 
   useEffect(() => () => window.clearTimeout(dwell.current), []);
 
-  const cancelDwell = () => window.clearTimeout(dwell.current);
+  const cancelDwell = () => {
+    window.clearTimeout(dwell.current);
+    setCharging(false);
+  };
 
   const BadgeIcon = badgeIcon === "heart" ? Heart : Eye;
   const fileOnly = !item.thumbnail && Boolean(item.fileUrl?.trim());
@@ -322,7 +328,9 @@ function FloatingTile({
               setHover(true);
               onFront();
               cancelDwell();
+              setCharging(true);
               dwell.current = window.setTimeout(() => {
+                setCharging(false);
                 if (!pressed.current && !dragged.current) onPreview();
               }, HOVER_DWELL_MS);
             }}
@@ -384,10 +392,30 @@ function FloatingTile({
               )}
               <motion.div className="pointer-events-none absolute inset-0 mix-blend-overlay" style={{ background: glare }} />
               <span
-                className={`pointer-events-none absolute flex items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/40 backdrop-blur ${
+                className={`pointer-events-none absolute flex items-center justify-center rounded-full bg-black/55 text-white ring-1 ring-white/40 backdrop-blur transition-transform duration-300 ${
                   isRow ? "bottom-1.5 right-1.5 h-5 w-5 md:bottom-2 md:right-2 md:h-6 md:w-6" : "bottom-2.5 right-2.5 h-7 w-7"
-                }`}
+                } ${charging ? "scale-[1.35]" : ""}`}
               >
+                {!isRow ? (
+                  /* fills over the 2s hover; the clip plays when it closes */
+                  <svg className="absolute -inset-[3px] h-[calc(100%+6px)] w-[calc(100%+6px)] -rotate-90" viewBox="0 0 36 36" aria-hidden>
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      fill="none"
+                      stroke="#fb923c"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      pathLength={100}
+                      strokeDasharray="100"
+                      style={{
+                        strokeDashoffset: charging ? 0 : 100,
+                        transition: charging ? `stroke-dashoffset ${HOVER_DWELL_MS}ms linear` : "stroke-dashoffset 150ms ease-out",
+                      }}
+                    />
+                  </svg>
+                ) : null}
                 <Play className={`translate-x-[0.5px] fill-current ${isRow ? "h-2.5 w-2.5 md:h-3 md:w-3" : "h-3 w-3"}`} aria-hidden />
               </span>
             </motion.div>
