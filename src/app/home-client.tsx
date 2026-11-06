@@ -10,7 +10,10 @@ import { SceneSlate } from "@/components/scene-slate";
 import { ScrollTapes } from "@/components/scroll-tapes";
 import { SectionCut } from "@/components/section-cut";
 import { TextLoop } from "@/components/text-loop";
-import { HeroCta } from "@/components/hero-cta";
+import { HeroPromptCta } from "@/components/hero-prompt-cta";
+import { HeroFloatingReels } from "@/components/hero-floating-reels";
+import type { HeroReel } from "@/components/hero-reel-viewer";
+import { videoPosterFrom } from "@/lib/video-source";
 import { LinkedinIcon } from "@/components/icons/linkedin-icon";
 import { YoutubeIcon } from "@/components/icons/youtube-icon";
 import { HighlightedEditsGallery as HighlightedEditsGalleryBase, type HighlightEditItem } from "@/components/highlighted-edits-gallery";
@@ -31,7 +34,7 @@ import { customHighlightPoster } from "@/lib/highlight-frames";
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { ACCENT_LABEL, DARK_PANEL_SURFACE } from "@/lib/panel";
 import { usePerfTier } from "@/lib/perf-tier";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { useLenis } from "lenis/react";
 import Image from "next/image";
 import {
@@ -107,28 +110,6 @@ const sectionEnterMs = 1.12;
 
 const sectionScrollOffset = 112;
 
-const heroDissolveShow = {
-  opacity: 1,
-  visibility: "visible" as const,
-  filter: "blur(0px) brightness(1) saturate(1)",
-  scale: 1,
-  y: 0,
-};
-
-const heroDissolveHide = {
-  opacity: 0,
-  visibility: "hidden" as const,
-  filter: "blur(12px) brightness(1.12) saturate(0.85)",
-  scale: 1.02,
-  y: -10,
-};
-
-function heroDissolveTransition(reduced: boolean, mobile: boolean, visible: boolean) {
-  if (reduced) return { duration: 0.15, ease: "easeOut" as const };
-  if (!visible) return { duration: mobile ? 0.42 : 0.38, ease: cinematicEase };
-  return { duration: mobile ? 0.58 : 0.48, ease: cinematicEase };
-}
-
 function shouldShowHeroOverlay(
   scrollY: number,
   innerHeight: number,
@@ -176,9 +157,11 @@ const HOME_BG_OBJECT_POSITION_MOBILE = "-40px center";
 const HOME_BG_OBJECT_POSITION_DESKTOP = "center";
 const HOME_HERO_LOGO = "/hero-logo.png";
 
-/** Hero tagline: width tracks logo breakpoints. */
-const heroTaglineWidthClass =
-  "w-full max-w-[min(90vw,500px)] sm:max-w-[min(85vw,540px)] md:max-w-[min(56vw,620px)] lg:max-w-[min(48vw,680px)]";
+/** Centered hero logo width (logo is the headline). */
+const heroCenterWidthClass =
+  "w-full max-w-[min(86vw,440px)] md:max-w-[min(60vw,520px)] lg:max-w-[min(38vw,540px)]";
+
+
 
 export default function HomeClient({ content }: HomeClientProps) {
   const lenis = useLenis();
@@ -221,6 +204,40 @@ export default function HomeClient({ content }: HomeClientProps) {
       }),
     [content.highlights.items],
   );
+
+  /** Floating hero reels: the admin's own list, else the first 4 highlights. */
+  const heroReels: HeroReel[] = useMemo(() => {
+    const custom = (content.hero.reels ?? []).filter(
+      (reel) => isEnabled(reel.enabled) && Boolean(reel.href?.trim() || reel.fileUrl?.trim()),
+    );
+    if (custom.length > 0) {
+      return custom.slice(0, 4).map((reel) => ({
+        title: reel.title,
+        href: normalizeYouTubeHref(reel.href ?? ""),
+        fileUrl: reel.fileUrl,
+        thumbnail: videoPosterFrom(reel.href, reel.posterUrl),
+      }));
+    }
+    return highlightedEdits.slice(0, 4).map((item) => ({
+      title: item.title,
+      href: item.href,
+      fileUrl: item.fileUrl,
+      thumbnail: item.thumbnail,
+    }));
+  }, [content.hero.reels, highlightedEdits]);
+
+  /** Desktop (≥1024px) shows the floating cluster; smaller screens show the fanned row. */
+  const [isDesktopReels, setIsDesktopReels] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktopReels(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const { scrollY: pageScrollY } = useScroll();
+  const mobileReelsOpacity = useTransform(pageScrollY, [0, 160], [1, 0]);
 
   const skillBlocks = useMemo(
     () => content.skills.blocks.filter((block) => isEnabled(block.enabled)),
@@ -718,114 +735,94 @@ export default function HomeClient({ content }: HomeClientProps) {
       />
 
       {isEnabled(content.hero.enabled) ? (
-      <motion.div
-        ref={heroOverlayRef}
-        data-hero-overlay
-        aria-hidden={!heroOverlayVisible}
-        initial={false}
-        animate={heroOverlayVisible ? heroDissolveShow : heroDissolveHide}
-        transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
-        style={{ transformOrigin: "top right" }}
-        className={`pointer-events-none fixed inset-x-0 top-0 flex justify-end px-5 pt-40 pr-[max(1rem,5vw)] will-change-[opacity,filter,transform] md:px-8 md:pt-[clamp(7.25rem,18vh,13rem)] md:pr-[max(1.25rem,7vw)] lg:pr-[max(1.5rem,9vw)] ${
-          !heroOverlayVisible ? "invisible z-[5]" : contentElevated ? "z-[8]" : "z-[15]"
-        }`}
+      /* Hero content is part of the page (not fixed), so the logo, tagline, prompt bar and
+         reels scroll up naturally with the page. */
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 h-[100svh] ${contentElevated ? "z-[8]" : "z-[15]"}`}
       >
-        <motion.div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          initial={false}
-          animate={
-            heroOverlayVisible
-              ? { opacity: 0, scale: 1 }
-              : { opacity: [0, 0.55, 0], scale: [1, 1.08, 1.12] }
-          }
-          transition={
-            navReducedMotion
-              ? { duration: 0.15 }
-              : heroOverlayVisible
-                ? { duration: 0.2 }
-                : { duration: 0.4, ease: cinematicEase, times: [0, 0.35, 1] }
-          }
-          style={{
-            background:
-              "radial-gradient(ellipse 90% 70% at 82% 28%, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.12) 38%, transparent 72%)",
-          }}
-        />
-        <div className="relative flex translate-y-[20px] flex-col items-end">
-          <motion.div
-            initial={false}
-            animate={
-              navReducedMotion
-                ? { opacity: heroOverlayVisible ? 1 : 0 }
-                : heroOverlayVisible
-                  ? heroDissolveShow
-                  : { ...heroDissolveHide, y: -14 }
-            }
-            transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
-            style={{ transformOrigin: "top right" }}
+        <div
+          ref={heroOverlayRef}
+          data-hero-overlay
+          className="relative flex justify-center px-5 pt-[clamp(6.5rem,14vh,7rem)] md:px-8 md:pt-[clamp(5.5rem,12vh,8rem)]"
+        >
+          <div
+            className="absolute right-[max(1.25rem,2vw)] top-[clamp(6.5rem,16vh,11rem)] hidden aspect-[3/4] w-[min(18vw,44vh)] lg:block xl:w-[min(20vw,380px,44vh)] 2xl:w-[min(24vw,400px,44vh)] [@media(max-height:560px)]:hidden"
           >
+            {isDesktopReels ? (
+              <HeroFloatingReels
+                items={heroReels}
+                badges={content.hero.aiCta?.proof ?? []}
+                hint={content.hero.aiCta?.reelsHint ?? "Hover to play"}
+              />
+            ) : null}
+          </div>
+
+          <div className="relative flex w-full flex-col items-center text-center">
             <Image
               src={HOME_HERO_LOGO}
               alt={`${content.header.name} logo`}
               width={800}
               height={320}
               unoptimized
-              className={`h-auto object-contain object-right ${heroTaglineWidthClass}`}
+              className={`mx-auto h-auto object-contain object-center ${heroCenterWidthClass}`}
               sizes="(max-width: 640px) 90vw, (max-width: 1024px) 56vw, 680px"
               priority
             />
-          </motion.div>
 
-          <div className={`-translate-y-1 mt-1.5 flex w-full flex-col items-end md:mt-5 md:translate-y-0 ${heroTaglineWidthClass}`}>
-            <motion.div
-              aria-label="Skyrocket. Engineered to grow your views."
-              initial={false}
-              animate={
-                navReducedMotion
-                  ? { opacity: heroOverlayVisible ? 1 : 0 }
-                  : heroOverlayVisible
-                    ? heroDissolveShow
-                    : { ...heroDissolveHide, y: -22, filter: "blur(22px) brightness(1.22) saturate(0.65)" }
-              }
-              transition={heroDissolveTransition(Boolean(navReducedMotion), isMobileView, heroOverlayVisible)}
-              style={{ transformOrigin: "top right" }}
-              className="ml-auto w-fit max-w-full text-[clamp(0.8125rem,2.8vw,0.975rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
-            >
-              <div className="flex w-fit max-w-full flex-col items-center">
-                <motion.span
-                  className="inline-flex min-h-[1.2em] w-fit max-w-full flex-nowrap items-center gap-x-1 whitespace-nowrap md:min-h-[1.3em] md:gap-x-1.5"
-                  variants={heroTaglineVariants}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  <span className="shrink-0 leading-none">{content.hero.linePrefix}</span>
-                  <TextLoop
-                    interval={showreelHover ? HERO_WORD_INTERVAL_FAST : HERO_WORD_INTERVAL}
-                    accelerated={showreelHover}
-                    forceMotion
-                    stableSlot
-                    className="min-h-[1.2em] w-[9ch] shrink-0 text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
+            <div className="mt-2 flex w-full flex-col items-center md:mt-4">
+              <div
+                aria-label={`${content.hero.linePrefix} ${content.hero.rotatingWords[0] ?? ""} ${content.hero.lineSuffix}`.replace(/\s+/g, " ").trim()}
+                className="mx-auto w-fit max-w-full text-[clamp(0.8125rem,2.8vw,0.975rem)] font-semibold leading-none tracking-[-0.03em] text-white title-glow-opposite-light-text md:text-[clamp(1.35rem,3.1vw,2rem)] lg:text-[clamp(1.45rem,2.6vw,2.2rem)]"
+              >
+                <div className="flex w-fit max-w-full flex-col items-center">
+                  <motion.span
+                    className="inline-flex min-h-[1.2em] w-fit max-w-full flex-nowrap items-center gap-x-1 whitespace-nowrap md:min-h-[1.3em] md:gap-x-1.5"
+                    variants={heroTaglineVariants}
+                    initial="hidden"
+                    animate="visible"
                   >
-                    {content.hero.rotatingWords.map((word) => (
-                      <span key={word}>{word}</span>
-                    ))}
-                  </TextLoop>
-                  <span className="shrink-0 leading-none">{content.hero.lineSuffix}</span>
-                </motion.span>
-
-                <div className="mt-5 max-md:translate-x-[52px] md:mt-9 md:translate-x-[30px]">
-                  <HeroCta
-                    label={content.hero.cta?.label ?? "Watch showreel"}
-                    href={content.hero.cta?.href ?? ""}
-                    visible={heroOverlayVisible}
-                    onHoverChange={setShowreelHover}
-                  />
+                    <span className="shrink-0 leading-none">{content.hero.linePrefix}</span>
+                    <TextLoop
+                      interval={showreelHover ? HERO_WORD_INTERVAL_FAST : HERO_WORD_INTERVAL}
+                      accelerated={showreelHover}
+                      forceMotion
+                      stableSlot
+                      className="min-h-[1.2em] w-[9ch] shrink-0 text-center font-bold leading-none tracking-[-0.04em] text-[clamp(0.875rem,3vw,1rem)] md:min-h-[1.45em] md:w-[11ch] md:text-[clamp(1.4rem,3.2vw,2.1rem)] lg:text-[clamp(1.5rem,2.75vw,2.25rem)]"
+                    >
+                      {content.hero.rotatingWords.map((word) => (
+                        <span key={word}>{word}</span>
+                      ))}
+                    </TextLoop>
+                    <span className="shrink-0 leading-none">{content.hero.lineSuffix}</span>
+                  </motion.span>
                 </div>
               </div>
-            </motion.div>
+
+              <div className="mt-6 flex w-full justify-center md:mt-7">
+                <HeroPromptCta
+                  prompts={content.hero.aiCta?.prompts ?? []}
+                  tools={content.hero.aiCta?.tools ?? []}
+                  visible={heroOverlayVisible}
+                  hireLabel={content.hero.aiCta?.hireLabel || "Hire me"}
+                  hireHref={content.hero.aiCta?.hireHref ?? ""}
+                  onHireClick={() => handleNavClick("contact")}
+                  onHoverChange={setShowreelHover}
+                />
+              </div>
+            </div>
           </div>
         </div>
-      </motion.div>
+
+        {/* Phones and tablets: fanned reels above the bottom timeline, fading out as you scroll. */}
+        {!isDesktopReels ? (
+          <motion.div
+            style={{ opacity: mobileReelsOpacity }}
+            className="absolute inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] px-4 md:bottom-[122px] lg:hidden [@media(max-height:560px)]:hidden"
+          >
+            <HeroFloatingReels items={heroReels} badges={[]} layout="row" />
+          </motion.div>
+        ) : null}
+      </div>
       ) : null}
 
       <ScrollTapes front={TAPES_INTRO.front} back={TAPES_INTRO.back} />

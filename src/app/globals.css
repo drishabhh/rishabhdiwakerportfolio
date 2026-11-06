@@ -123,3 +123,50 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Hero prompt-bar CTA: blinking caret + one soft orange sweep along the border every few seconds. */
+.hero-prompt-caret { animation: hero-prompt-blink 1s steps(2) infinite; }
+@keyframes hero-prompt-blink { 50% { opacity: 0; } }
+.hero-prompt-bar::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(110deg, transparent 35%, rgba(251, 146, 60, 0.95) 50%, transparent 65%) 200% 0 / 250% 100% no-repeat;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: hero-prompt-sweep 4.2s ease-in-out infinite;
+}
+@keyframes hero-prompt-sweep {
+  0%, 55% { background-position: 200% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-prompt-bar::before { animation: none; }
+}
+
+/* Hero floating reels: a slow, continuous drift. Vertical and horizontal run on two different
+   sine-like loops (nested wrappers), so the combined path never comes to a dead stop.
+   Lives on wrappers so the tile's own transforms stay free for drag + tilt. */
+.hero-float-bob   { animation: hero-float-y 4.5s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate; will-change: transform; }
+.hero-float-sway  { animation: hero-float-x 7.5s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate; will-change: transform; }
+@keyframes hero-float-y { from { transform: translate3d(0, 5px, 0); } to { transform: translate3d(0, -7px, 0); } }
+@keyframes hero-float-x { from { transform: translate3d(-3px, 0, 0) rotate(-0.6deg); } to { transform: translate3d(3px, 0, 0) rotate(0.6deg); } }
+.hero-float-shadow {
+  position: absolute; left: 14%; right: 14%; bottom: -22px; height: 18px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0,0,0,0.5), transparent);
+  filter: blur(4px); pointer-events: none;
+  animation: hero-float-shadow 4.5s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
+}
+@keyframes hero-float-shadow { from { transform: scale(1); opacity: .65; } to { transform: scale(.88); opacity: .45; } }
+/* Reduced motion: keep a smaller, slower drift instead of freezing (it's a few pixels, never a jump). */
+@keyframes hero-float-y-soft { from { transform: translate3d(0, 3px, 0); } to { transform: translate3d(0, -4px, 0); } }
+@keyframes hero-float-x-soft { from { transform: translate3d(-2px, 0, 0); } to { transform: translate3d(2px, 0, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .hero-float-bob  { animation-name: hero-float-y-soft; }
+  .hero-float-sway { animation-name: hero-float-x-soft; }
+  .hero-float-shadow { animation: none; }
+}

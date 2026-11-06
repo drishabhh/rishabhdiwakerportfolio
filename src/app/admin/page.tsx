@@ -4,6 +4,7 @@ import { FaviconEditor } from "@/components/admin/favicon-editor";
 import { ResumeEditor } from "@/components/admin/resume-editor";
 import type {
   ExperienceRole,
+  HeroReelItem,
   HighlightItem,
   ServiceItem,
   SiteContent,
@@ -18,6 +19,7 @@ import { originalHighlightItems } from "@/lib/original-highlights";
 import { requestHighlightUploadToken, xhrPutHighlightToBlob } from "@/lib/highlight-blob-upload";
 import { highlightProviderFromUrl, highlightThumbnailFromUrl, vimeoFromUrl } from "@/lib/vimeo";
 import { normalizeYouTubeHref, youtubeVideoIdFromUrl } from "@/lib/youtube";
+import { videoPosterFrom, videoSourceFrom, videoSourceLabel } from "@/lib/video-source";
 import { LogOut, Pencil, Plus, RotateCcw, Save, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -425,7 +427,11 @@ export default function AdminPage() {
     setTimeout(() => setMessage(""), 4000);
   };
 
-  const uploadHighlightVideo = async (index: number, file: File) => {
+  const uploadHighlightVideo = async (
+    index: number,
+    file: File,
+    apply: (url: string) => void = (url) => updateHighlight(index, { fileUrl: url }),
+  ) => {
     const maxBytes = 100 * 1024 * 1024;
     if (file.size > maxBytes) {
       setMessage("Video must be 100 MB or smaller. Compress it and try again.");
@@ -451,7 +457,7 @@ export default function AdminPage() {
       const clientToken = await requestHighlightUploadToken(pathname, contentType, file.size);
       setMessage("Uploading to storage…");
       const url = await xhrPutHighlightToBlob(pathname, file, contentType, clientToken, setHighlightUploadPercent);
-      updateHighlight(index, { fileUrl: url });
+      apply(url);
       setMessage("Video uploaded! Click Save to publish it on the site.");
       setTimeout(() => setMessage(""), 5000);
     } catch (error) {
@@ -464,7 +470,7 @@ export default function AdminPage() {
           const res = await fetch("/api/admin/highlight-video", { method: "POST", body: formData });
           const data = (await res.json()) as { url?: string; error?: string };
           if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
-          updateHighlight(index, { fileUrl: data.url });
+          apply(data.url);
           setHighlightUploadPercent(100);
           setMessage("Video uploaded! Click Save to publish it on the site.");
           setTimeout(() => setMessage(""), 5000);
@@ -481,7 +487,11 @@ export default function AdminPage() {
     }
   };
 
-  const uploadHighlightPoster = async (index: number, file: File) => {
+  const uploadHighlightPoster = async (
+    index: number,
+    file: File,
+    apply: (url: string) => void = (url) => updateHighlight(index, { posterUrl: url }),
+  ) => {
     setUploadingPosterIndex(index);
     setMessage("Uploading thumbnail…");
     try {
@@ -490,7 +500,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/highlight-poster", { method: "POST", body: formData });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) throw new Error(data.error || "Thumbnail upload failed");
-      updateHighlight(index, { posterUrl: data.url });
+      apply(data.url);
       setMessage("Thumbnail uploaded! Click Save to publish it on the site.");
       setTimeout(() => setMessage(""), 5000);
     } catch (error) {
@@ -519,6 +529,34 @@ export default function AdminPage() {
       </div>
     );
   }
+
+  const aiCtaDefaults = {
+    label: "Watch AI work",
+    href: "",
+    prompts: [] as string[],
+    tools: [] as string[],
+    proof: [] as string[],
+    hireLabel: "Hire me",
+    hireHref: "",
+    reelsHint: "Hover to play",
+  };
+  const aiCta = { ...aiCtaDefaults, ...content.hero.aiCta };
+  const setAiCta = (patch: Partial<typeof aiCtaDefaults>) =>
+    setContent((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        hero: { ...c.hero, aiCta: { ...aiCtaDefaults, ...c.hero.aiCta, ...patch } },
+      };
+    });
+
+  /** Hero reels use upload slots 1000+ so their progress never mixes with Highlights. */
+  const REEL_SLOT = 1000;
+  const heroReels: HeroReelItem[] = content.hero.reels ?? [];
+  const setHeroReels = (update: (reels: HeroReelItem[]) => HeroReelItem[]) =>
+    setContent((c) => (c ? { ...c, hero: { ...c.hero, reels: update(c.hero.reels ?? []) } } : c));
+  const updateHeroReel = (index: number, patch: Partial<HeroReelItem>) =>
+    setHeroReels((reels) => reels.map((reel, i) => (i === index ? { ...reel, ...patch } : reel)));
 
   const setHighlightOrder = (index: number, raw: string) => {
     const parsed = Number.parseInt(raw, 10);
@@ -837,38 +875,175 @@ export default function AdminPage() {
                 hint="Words that cycle in the hero line"
               />
               <Field label="Suffix" value={content.hero.lineSuffix} onChange={(v) => setContent({ ...content, hero: { ...content.hero, lineSuffix: v } })} />
+              <h3 className="pt-4 text-sm font-semibold text-orange-300">AI prompt bar (home screen)</h3>
               <Field
-                label="CTA button label"
-                value={content.hero.cta?.label ?? ""}
-                onChange={(v) =>
-                  setContent({
-                    ...content,
-                    hero: {
-                      ...content.hero,
-                      cta: {
-                        label: v,
-                        href: content.hero.cta?.href ?? "",
-                      },
-                    },
-                  })
-                }
-                hint="Home screen call-to-action button"
+                label="Button text"
+                value={aiCta.hireLabel}
+                onChange={(v) => setAiCta({ hireLabel: v })}
+                hint="Orange button inside the bar, e.g. Hire me"
               />
               <Field
-                label="CTA link (YouTube URL)"
-                value={content.hero.cta?.href ?? ""}
-                onChange={(v) =>
-                  setContent({
-                    ...content,
-                    hero: {
-                      ...content.hero,
-                      cta: {
-                        label: content.hero.cta?.label ?? "Watch showreel",
-                        href: v,
-                      },
-                    },
-                  })
-                }
+                label="Button link (optional)"
+                value={aiCta.hireHref}
+                onChange={(v) => setAiCta({ hireHref: v })}
+                hint="Leave empty to scroll to your Contact section. Or paste a link, e.g. WhatsApp or Calendly"
+              />
+              <Field
+                label="Typewriter lines (one per line)"
+                value={aiCta.prompts.join("\n")}
+                onChange={(v) => setAiCta({ prompts: v.split("\n") })}
+                onBlur={() => setAiCta({ prompts: aiCta.prompts.map((p) => p.trim()).filter(Boolean) })}
+                multiline
+                hint="Each line types itself into the bar, then erases, then the next one"
+              />
+              <CommaSeparatedField
+                label="Tools (comma-separated)"
+                items={aiCta.tools}
+                onChange={(tools) => setAiCta({ tools })}
+                hint="Shown under the bar"
+              />
+              <Field
+                label="Proof (one per line)"
+                value={aiCta.proof.join("\n")}
+                onChange={(v) => setAiCta({ proof: v.split("\n") })}
+                onBlur={() => setAiCta({ proof: aiCta.proof.map((p) => p.trim()).filter(Boolean) })}
+                multiline
+                hint="Short real stats. The first two also show as stickers on the floating reels"
+              />
+              <h3 className="pt-4 text-sm font-semibold text-orange-300">Floating reels (home screen)</h3>
+              <p className="text-xs text-zinc-500">
+                Up to 4 reels. Each one plays right on the site: hover on desktop, tap on phones. Paste a YouTube,
+                Instagram, Vimeo, Google Drive or .mp4 link, or upload the video file. Leave this empty to use your first
+                4 Highlights.
+              </p>
+              {heroReels.map((reel, i) => {
+                const source = videoSourceFrom(reel.href, reel.fileUrl);
+                const poster = videoPosterFrom(reel.href, reel.posterUrl);
+                const needsPoster = !poster && !reel.fileUrl?.trim() && Boolean(source);
+                const reelOn = isEnabled(reel.enabled);
+                return (
+                  <div
+                    key={`hero-reel-${i}`}
+                    className={`space-y-3 rounded-xl border bg-zinc-950/50 p-4 ${reelOn ? "border-zinc-800" : "border-zinc-800/80 opacity-70"}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="relative h-16 w-10 shrink-0 overflow-hidden rounded-md border border-zinc-700 bg-zinc-800">
+                          {poster ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={poster} alt="" className="h-full w-full object-cover" />
+                          ) : reel.fileUrl?.trim() ? (
+                            <video src={`${reel.fileUrl}#t=0.5`} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-300">Reel {i + 1}</p>
+                          <p className={`text-xs ${source ? "text-emerald-400" : "text-amber-400"}`}>
+                            {source ? `${videoSourceLabel(source)} — plays on the site` : "Add a link or upload a video"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                        <EnabledToggle
+                          on={reelOn}
+                          onChange={(enabled) => updateHeroReel(i, { enabled })}
+                          name={reel.title || `reel ${i + 1}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setHeroReels((reels) => reels.filter((_, j) => j !== i))}
+                          className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-red-400"
+                        >
+                          <Trash2 size={16} />
+                          <span className="hidden sm:inline">Remove</span>
+                        </button>
+                      </div>
+                    </div>
+                    <Field label="Title" value={reel.title} onChange={(v) => updateHeroReel(i, { title: v })} />
+                    <Field
+                      label="Video link"
+                      value={reel.href}
+                      onChange={(v) => updateHeroReel(i, { href: v })}
+                      onBlur={() => updateHeroReel(i, { href: normalizeYouTubeHref(reel.href) })}
+                      hint="YouTube / Shorts, Instagram reel or post, Vimeo, Google Drive (shared to anyone with the link), or a direct .mp4 link"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label
+                        className={`inline-flex cursor-pointer items-center rounded-lg border border-orange-700/60 bg-orange-950/30 px-3 py-2 text-xs text-orange-200 hover:bg-orange-950/50 ${
+                          uploadingHighlightIndex === REEL_SLOT + i ? "pointer-events-none opacity-60" : ""
+                        }`}
+                      >
+                        {uploadingHighlightIndex === REEL_SLOT + i
+                          ? `Uploading ${highlightUploadPercent}%…`
+                          : reel.fileUrl?.trim()
+                            ? "Replace uploaded video"
+                            : "Upload video file (max 100 MB)"}
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void uploadHighlightVideo(REEL_SLOT + i, file, (url) => updateHeroReel(i, { fileUrl: url }));
+                          }}
+                        />
+                      </label>
+                      {reel.fileUrl?.trim() ? (
+                        <button
+                          type="button"
+                          onClick={() => updateHeroReel(i, { fileUrl: "" })}
+                          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+                        >
+                          Remove uploaded video
+                        </button>
+                      ) : null}
+                    </div>
+                    {reel.fileUrl?.trim() ? (
+                      <p className="truncate text-xs text-emerald-300/80">Uploaded file plays instead of the link: {reel.fileUrl}</p>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                      <Field
+                        label="Thumbnail image URL (optional)"
+                        value={reel.posterUrl || ""}
+                        onChange={(v) => updateHeroReel(i, { posterUrl: v })}
+                        hint={
+                          needsPoster
+                            ? "Instagram and Drive don't share thumbnails, so upload one for this reel"
+                            : "YouTube and Vimeo thumbnails are filled in automatically"
+                        }
+                      />
+                      <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-zinc-700 px-3 py-2.5 text-xs text-zinc-300 hover:bg-zinc-800">
+                        {uploadingPosterIndex === REEL_SLOT + i ? "Uploading…" : "Upload thumbnail"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void uploadHighlightPoster(REEL_SLOT + i, file, (url) => updateHeroReel(i, { posterUrl: url }));
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              {heroReels.length < 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setHeroReels((reels) => [...reels, { title: "", href: "", enabled: true }])}
+                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:border-orange-500 hover:text-orange-300"
+                >
+                  <Plus size={16} /> Add reel
+                </button>
+              ) : null}
+              <Field
+                label="Hint under the reels (desktop)"
+                value={aiCta.reelsHint}
+                onChange={(v) => setAiCta({ reelsHint: v })}
+                hint="Leave empty to hide it"
               />
             </section>
           )}

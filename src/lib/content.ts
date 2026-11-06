@@ -41,6 +41,22 @@ export const defaultContent: SiteContent = {
       label: "Watch showreel",
       href: "https://youtu.be/AtdjWGqebMY?si=OZT9l5M-jU5eDZoG",
     },
+    aiCta: {
+      label: "Watch AI work",
+      href: "https://youtube.com/playlist?list=PLdT9F7iP4yrSbQvttGxOIpyEWS5cFjUl0&si=S1fwvrQXah7aIBHw",
+      prompts: [
+        "cut a 30s ad from 2 hrs of footage",
+        "turn this script into a Veo b-roll pack",
+        "make 5 hook variants for Reels",
+        "voice it in ElevenLabs, caption it, export all ratios",
+      ],
+      tools: ["Veo", "Kling", "Runway", "ElevenLabs"],
+      proof: ["250K+ users reached", "5 yrs editing", "AI-native workflow"],
+      hireLabel: "Hire me",
+      hireHref: "",
+      reelsHint: "Hover to play",
+    },
+    reels: [],
   },
   summary: {
     title: "Summary",
@@ -300,6 +316,10 @@ export function mergeContent(partial: Partial<SiteContent>): SiteContent {
       cta: {
         ...defaultContent.hero.cta,
         ...partial.hero?.cta,
+      },
+      aiCta: {
+        ...defaultContent.hero.aiCta!,
+        ...partial.hero?.aiCta,
       },
     },
     summary: { ...defaultContent.summary, ...partial.summary },

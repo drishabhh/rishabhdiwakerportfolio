@@ -18,6 +18,18 @@ export type HighlightItem = {
   enabled?: boolean;
 };
 
+/** One of the four floating reels on the home screen. Plays on the site, never redirects. */
+export type HeroReelItem = {
+  title: string;
+  /** YouTube, Instagram, Vimeo, Google Drive or a direct .mp4 link. */
+  href: string;
+  /** Uploaded video file (takes priority over the link). */
+  fileUrl?: string;
+  /** Thumbnail; needed for Instagram/Drive links, optional otherwise. */
+  posterUrl?: string;
+  enabled?: boolean;
+};
+
 export type SkillBlock = {
   num: string;
   title: string;
@@ -79,6 +91,22 @@ export type SiteContent = {
       label: string;
       href: string;
     };
+    /** AI prompt-bar CTA on the home screen (replaces the plain showreel button). */
+    aiCta?: {
+      label: string;
+      href: string;
+      prompts: string[];
+      tools: string[];
+      proof: string[];
+      /** Orange button text in the prompt bar. */
+      hireLabel?: string;
+      /** Optional link for the button; empty scrolls to the Contact section. */
+      hireHref?: string;
+      /** Hint under the floating reels on desktop. */
+      reelsHint?: string;
+    };
+    /** Floating reels on the home screen; empty uses the first 4 highlights. */
+    reels?: HeroReelItem[];
     enabled?: boolean;
   };
   summary: {
