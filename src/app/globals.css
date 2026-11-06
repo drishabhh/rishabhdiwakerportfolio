@@ -170,3 +170,71 @@ a {
   .hero-float-sway { animation-name: hero-float-x-soft; }
   .hero-float-shadow { animation: none; }
 }
+
+/* ── Hire me: whip pan ───────────────────────────────────────────────── */
+.whip-fx { --k: 0; --blur: 0px; }
+.whip-blur {
+  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur));
+}
+/* vertical speed streaks, only visible at speed */
+.whip-streaks {
+  opacity: calc(var(--k) * 0.85);
+  background:
+    repeating-linear-gradient(90deg,
+      transparent 0 7px, rgba(255, 255, 255, 0.07) 7px 8px, transparent 8px 23px,
+      rgba(255, 255, 255, 0.04) 23px 24px, transparent 24px 41px);
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 30%, transparent 70%, #000);
+  mask-image: linear-gradient(180deg, #000, transparent 30%, transparent 70%, #000);
+  mix-blend-mode: screen;
+}
+/* RGB split at the top and bottom edges, like a lens whipping past */
+.whip-fringe {
+  opacity: var(--k);
+  background:
+    linear-gradient(180deg, rgba(255, 40, 60, 0.28), transparent 22%),
+    linear-gradient(0deg, rgba(0, 220, 255, 0.24), transparent 22%);
+  mix-blend-mode: screen;
+}
+.whip-vignette {
+  opacity: calc(0.25 + var(--k) * 0.75);
+  background: radial-gradient(ellipse 85% 65% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.75) 100%);
+  transition: opacity 0.2s ease;
+}
+.whip-fx.is-land .whip-vignette { opacity: 0; transition: opacity 0.5s ease; }
+.whip-tap {
+  position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 999px;
+  border: 2px solid rgba(253, 186, 116, 0.95); box-shadow: 0 0 24px rgba(249, 115, 22, 0.9);
+  animation: whip-tap 0.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+@keyframes whip-tap { 0% { opacity: 1; transform: scale(0.6); } 100% { opacity: 0; transform: scale(7); } }
+/* landing: a one-frame "cut" flash, then an orange scan line wipes across */
+.whip-cut { background: #fff; animation: whip-cut 0.32s steps(1, end) forwards, whip-cut-fade 0.32s ease-out forwards; }
+@keyframes whip-cut { 0% { opacity: 0.9; } }
+@keyframes whip-cut-fade { 0% { opacity: 0.85; } 25% { opacity: 0.35; } 100% { opacity: 0; } }
+.whip-scan {
+  position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+  background: linear-gradient(90deg, transparent, #fdba74 20%, #fff 50%, #fdba74 80%, transparent);
+  box-shadow: 0 0 22px 4px rgba(249, 115, 22, 0.8);
+  transform-origin: center; animation: whip-scan 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes whip-scan {
+  0% { opacity: 1; transform: scaleX(0); }
+  45% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1) scaleY(0.2); }
+}
+/* the page slams in: squash, rebound and a short camera shake */
+@keyframes whip-impact {
+  0%   { transform: translate3d(0, 34px, 0) scaleY(0.93); }
+  12%  { transform: translate3d(-7px, -12px, 0) scaleY(1.025); }
+  24%  { transform: translate3d(6px, 6px, 0) scaleY(0.995); }
+  36%  { transform: translate3d(-4px, -3px, 0) scaleY(1.005); }
+  50%  { transform: translate3d(2px, 2px, 0) scaleY(1); }
+  68%  { transform: translate3d(-1px, -1px, 0); }
+  100% { transform: none; }
+}
+#colophon.hire-landed { animation: hire-landed 1.6s ease-out; }
+@keyframes hire-landed {
+  0% { box-shadow: inset 0 0 0 2px rgba(251, 146, 60, 0.9), 0 0 80px rgba(249, 115, 22, 0.55); }
+  100% { box-shadow: inset 0 0 0 0 rgba(251, 146, 60, 0), 0 0 0 rgba(249, 115, 22, 0); }
+}

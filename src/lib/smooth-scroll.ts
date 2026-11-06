@@ -53,6 +53,8 @@ export function onUserScrollIntent(onIntent: () => void): () => void {
 export type SmoothScrollOptions = {
   duration?: number;
   offset?: number;
+  /** Progress curve 0→1; defaults to the cinematic ease. */
+  easing?: (t: number) => number;
   onComplete?: () => void;
   /** Called instead of onComplete when the user takes over mid-glide. */
   onInterrupt?: () => void;
@@ -60,7 +62,7 @@ export type SmoothScrollOptions = {
 
 export function smoothScrollToY(
   targetY: number,
-  { duration, offset = 0, onComplete, onInterrupt }: SmoothScrollOptions = {},
+  { duration, offset = 0, easing = cinematicEase, onComplete, onInterrupt }: SmoothScrollOptions = {},
 ): () => void {
   const startY = window.scrollY;
   const distance = targetY - offset - startY;
@@ -85,7 +87,7 @@ export function smoothScrollToY(
     if (cancelled) return;
     const elapsed = now - startTime;
     const progress = Math.min(elapsed / resolvedDuration, 1);
-    const eased = cinematicEase(progress);
+    const eased = easing(progress);
     window.scrollTo({ top: startY + distance * eased, left: 0 });
     if (progress < 1) {
       frameId = requestAnimationFrame(step);

@@ -539,7 +539,11 @@ export default function HomeClient({ content }: HomeClientProps) {
   }, []);
 
   const handleNavClick = useCallback(
-    (id: (typeof navItems)[number]["id"]) => {
+    (
+      id: (typeof navItems)[number]["id"],
+      /** Custom glide (e.g. the Hire me warp): duration in seconds, easing, and an arrival callback. */
+      glideOptions?: { duration?: number; easing?: (t: number) => number; onArrive?: () => void },
+    ) => {
       const matchingItem = navItems.find((item) => item.id === id);
       if (!matchingItem) return;
       const section = document.getElementById(matchingItem.targetId);
@@ -563,15 +567,21 @@ export default function HomeClient({ content }: HomeClientProps) {
       const glide = (target: number | HTMLElement, distance: number, offset: number, arrive: () => void) => {
         if (!lenis) {
           const targetY = typeof target === "number" ? target : target.getBoundingClientRect().top + window.scrollY;
-          cancelScrollRef.current = smoothScrollToY(targetY, { offset, onComplete: arrive, onInterrupt: releaseLock });
+          cancelScrollRef.current = smoothScrollToY(targetY, {
+            offset,
+            duration: glideOptions?.duration != null ? glideOptions.duration * 1000 : undefined,
+            easing: glideOptions?.easing,
+            onComplete: arrive,
+            onInterrupt: releaseLock,
+          });
           return;
         }
         const stopWatching = onUserScrollIntent(releaseLock);
         cancelScrollRef.current = stopWatching;
         lenis.scrollTo(target, {
           offset: -offset,
-          duration: navScrollDuration(distance),
-          easing: scrollEase,
+          duration: glideOptions?.duration ?? navScrollDuration(distance),
+          easing: glideOptions?.easing ?? scrollEase,
           onComplete: () => {
             stopWatching();
             arrive();
@@ -598,6 +608,7 @@ export default function HomeClient({ content }: HomeClientProps) {
         releaseLock();
         setHeroOverlayVisible(false);
         setContentElevated(true);
+        glideOptions?.onArrive?.();
       });
     },
     [lenis],
@@ -805,7 +816,7 @@ export default function HomeClient({ content }: HomeClientProps) {
                   visible={heroOverlayVisible}
                   hireLabel={content.hero.aiCta?.hireLabel || "Hire me"}
                   hireHref={content.hero.aiCta?.hireHref ?? ""}
-                  onHireClick={() => handleNavClick("contact")}
+                  onHireClick={(glide) => handleNavClick("contact", glide)}
                   onHoverChange={setShowreelHover}
                 />
               </div>

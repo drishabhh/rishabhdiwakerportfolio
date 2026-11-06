@@ -2,6 +2,7 @@
 
 import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { motion, useSpring } from "framer-motion";
+import { HireMeButton, type HireGlide } from "@/components/hire-me-fx";
 import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -24,7 +25,7 @@ export type HeroPromptCtaProps = {
   hireLabel?: string;
   /** Optional link for the button; empty means onHireClick (scroll to Contact). */
   hireHref?: string;
-  onHireClick?: () => void;
+  onHireClick?: (glide: HireGlide) => void;
   onHoverChange?: (hovered: boolean) => void;
 };
 
@@ -95,9 +96,8 @@ export function HeroPromptCta({
   }, [visible, list.join("\u0000")]);
 
   const label = hireLabel.trim() || "Hire me";
-  const external = Boolean(hireHref.trim());
   const buttonClass =
-    "hero-hire-btn shrink-0 rounded-xl bg-orange-500 px-3.5 py-2 text-[12px] font-semibold text-black shadow-[0_8px_22px_rgba(249,115,22,0.45)] transition-[background-color,transform] duration-200 hover:bg-orange-400 active:scale-95 md:px-5 md:py-2.5 md:text-[14px]";
+    "hero-hire-btn shrink-0 rounded-xl bg-orange-500 px-3.5 py-2 text-[12px] font-semibold text-black shadow-[0_8px_22px_rgba(249,115,22,0.45)] transition-[background-color] duration-200 hover:bg-orange-400 md:px-5 md:py-2.5 md:text-[14px]";
 
   return (
     <motion.div
@@ -139,15 +139,7 @@ export function HeroPromptCta({
           <span aria-hidden>{list.length ? text : ""}</span>
           <span className="hero-prompt-caret ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[2px] bg-white/85" aria-hidden />
         </span>
-        {external ? (
-          <a href={hireHref} target="_blank" rel="noreferrer" className={buttonClass}>
-            {label} <span aria-hidden>→</span>
-          </a>
-        ) : (
-          <button type="button" onClick={onHireClick} className={buttonClass}>
-            {label} <span aria-hidden>→</span>
-          </button>
-        )}
+        <HireMeButton label={label} href={hireHref} onHire={onHireClick} className={buttonClass} />
       </motion.div>
 
       {tools.length ? (
