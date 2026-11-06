@@ -1,5 +1,6 @@
 "use client";
 
+import { canPlayWithSound, useSoundUnlock } from "@/lib/sound-policy";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { youtubeVideoIdFromUrl } from "@/lib/youtube";
@@ -169,6 +170,8 @@ type CardProps = {
   onPause: () => void;
   onResume: () => void;
   onToggleMute: () => void;
+  /** Browser refused sound for this play; parent shows the video as muted. */
+  onAutoMuted?: () => void;
 };
 
 function HighlightCard({
@@ -189,6 +192,7 @@ function HighlightCard({
   onPause,
   onResume,
   onToggleMute,
+  onAutoMuted,
 }: CardProps) {
   const poster = posterFor(item);
   const [posterSrc, setPosterSrc] = useState(poster);
@@ -504,6 +508,15 @@ function HighlightCard({
     const video = videoRef.current;
     if (!videoMounted || !video) return;
     video.muted = muted;
+    if (!muted && !wasPausedRef.current) {
+      void video.play().catch(() => {
+        /* No click/tap on the page yet: keep playing, muted, until the first one. */
+        video.muted = true;
+        onAutoMuted?.();
+        void video.play().catch(() => {});
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted, videoMounted]);
 
   useEffect(() => {
@@ -733,6 +746,7 @@ function HighlightCard({
             <button
               type="button"
               aria-label={muted ? "Unmute" : "Mute"}
+              data-sound-toggle
               onClick={handleToggleMute}
               onPointerDown={(e) => e.stopPropagation()}
               className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur"
@@ -957,6 +971,12 @@ function HighlightRail({
   const expandedLockRef = useRef(false);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [muted, setMuted] = useState(true);
+  /** Muted only because the browser required a click first (not the visitor's choice). */
+  const [policyMuted, setPolicyMuted] = useState(false);
+  useSoundUnlock(activeId !== null && policyMuted, () => {
+    setPolicyMuted(false);
+    setMuted(false);
+  });
   const [playbackPaused, setPlaybackPaused] = useState(false);
 
   const close = useCallback(() => {
@@ -966,8 +986,10 @@ function HighlightRail({
 
   const open = useCallback((index: number) => {
     if (index < 0 || index >= items.length) return;
+    const withSound = canPlayWithSound();
     flushSync(() => {
-      setMuted(true);
+      setMuted(!withSound);
+      setPolicyMuted(!withSound);
       setPlaybackPaused(false);
       setActiveId(index);
     });
@@ -1043,7 +1065,14 @@ function HighlightRail({
               onClose={close}
               onPause={pausePlayback}
               onResume={resumePlayback}
-              onToggleMute={() => setMuted((m) => !m)}
+              onToggleMute={() => {
+                setPolicyMuted(false);
+                setMuted((m) => !m);
+              }}
+              onAutoMuted={() => {
+                setMuted(true);
+                setPolicyMuted(true);
+              }}
             />
           </div>
         ))}
@@ -1083,6 +1112,12 @@ function DesktopMarquee({
 
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
+  /** Muted only because the browser required a click first (not the visitor's choice). */
+  const [policyMuted, setPolicyMuted] = useState(false);
+  useSoundUnlock(activeSlot !== null && policyMuted, () => {
+    setPolicyMuted(false);
+    setMuted(false);
+  });
   const [playbackPaused, setPlaybackPaused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -1247,8 +1282,10 @@ function DesktopMarquee({
   const open = useCallback(
     (strip: StripId, index: number) => {
       if (index < 0 || index >= itemCount) return;
+      const withSound = canPlayWithSound();
       flushSync(() => {
-        setMuted(true);
+        setMuted(!withSound);
+        setPolicyMuted(!withSound);
         setPlaybackPaused(false);
         setActiveSlot(marqueeSlot(strip, index));
       });
@@ -1317,7 +1354,14 @@ function DesktopMarquee({
             onClose={close}
             onPause={pausePlayback}
             onResume={resumePlayback}
-            onToggleMute={() => setMuted((m) => !m)}
+            onToggleMute={() => {
+              setPolicyMuted(false);
+              setMuted((m) => !m);
+            }}
+            onAutoMuted={() => {
+              setMuted(true);
+              setPolicyMuted(true);
+            }}
           />
         </div>
       );

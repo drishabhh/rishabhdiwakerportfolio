@@ -58,6 +58,7 @@ export function embedSrc(source: VideoSource, opts: { muted: boolean; controls: 
         modestbranding: "1",
         enablejsapi: "1",
       });
+      if (typeof window !== "undefined") p.set("origin", window.location.origin);
       return `https://www.youtube.com/embed/${source.id}?${p.toString()}`;
     }
     case "vimeo": {

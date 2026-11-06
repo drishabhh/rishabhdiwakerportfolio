@@ -1,5 +1,6 @@
 "use client";
 
+import { SOUND_TOGGLE_ATTR, canPlayWithSound, useSoundUnlock } from "@/lib/sound-policy";
 import { canToggleSound, embedSrc, videoSourceFrom, type VideoSource } from "@/lib/video-source";
 import { motion, useDragControls, type PanInfo } from "framer-motion";
 import { useLenis } from "lenis/react";
@@ -87,10 +88,19 @@ export function HeroReelViewer({ reel, mode, origin, onClose, onExpand }: Viewer
   const isModal = mode === "modal";
   const lenis = useLenis();
   const pushedRef = useRef(false);
-  /* Hover preview starts muted, the full player starts with sound; the toggle only lasts for its own mode. */
+  /* Videos play WITH sound. The only exception is the browser rule that sound needs one
+     click/tap on the page first: then the hover preview starts muted and the sound comes on
+     at the visitor's first click/tap. The full player is always opened by a click/tap. */
+  const [allowedAtOpen] = useState(canPlayWithSound);
+  const [autoMuted, setAutoMuted] = useState(false);
   const [soundChoice, setSoundChoice] = useState<{ mode: "preview" | "modal"; on: boolean } | null>(null);
-  const muted = soundChoice && soundChoice.mode === mode ? !soundChoice.on : !isModal;
-  const setMuted = (next: boolean) => setSoundChoice({ mode, on: !next });
+  const userChose = Boolean(soundChoice && soundChoice.mode === mode);
+  const muted = userChose ? !soundChoice!.on : (!isModal && !allowedAtOpen) || autoMuted;
+  const setMuted = (next: boolean) => {
+    setAutoMuted(false);
+    setSoundChoice({ mode, on: !next });
+  };
+  useSoundUnlock(muted && !userChose, () => setMuted(false));
   const dragControls = useDragControls();
 
   /* Modal: freeze page scroll and make the phone/browser back button close it. */
@@ -203,7 +213,13 @@ export function HeroReelViewer({ reel, mode, origin, onClose, onExpand }: Viewer
           }`}
         >
           {source ? (
-            <ReelMedia source={source} poster={reel.thumbnail} muted={muted} controls={isModal} />
+            <ReelMedia
+              source={source}
+              poster={reel.thumbnail}
+              muted={muted}
+              controls={isModal}
+              onAutoMuted={() => setAutoMuted(true)}
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-white/70">
               This video has no playable link yet.
@@ -234,6 +250,7 @@ export function HeroReelViewer({ reel, mode, origin, onClose, onExpand }: Viewer
             <button
               type="button"
               aria-label={muted ? "Turn sound on" : "Mute"}
+              {...{ [SOUND_TOGGLE_ATTR]: "" }}
               onClick={(e) => {
                 e.stopPropagation();
                 setMuted(!muted);
@@ -288,39 +305,63 @@ function ReelMedia({
   poster,
   muted,
   controls,
+  onAutoMuted,
 }: {
   source: VideoSource;
   poster: string;
   muted: boolean;
   controls: boolean;
+  onAutoMuted: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  /* The iframe URL is fixed per mount so toggling sound doesn't reload it. */
-  const [initialMuted] = useState(muted);
+  const mutedRef = useRef(muted);
+  const timers = useRef<number[]>([]);
+
+  /* Tell an embedded player to match our sound state. */
+  const syncEmbedSound = useCallback(() => {
+    const win = frameRef.current?.contentWindow;
+    if (!win) return;
+    const m = mutedRef.current;
+    if (source.kind === "youtube") {
+      win.postMessage(JSON.stringify({ event: "listening" }), "*");
+      win.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
+      win.postMessage(JSON.stringify({ event: "command", func: m ? "mute" : "unMute", args: [] }), "*");
+      if (!m) win.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [100] }), "*");
+    } else if (source.kind === "vimeo") {
+      win.postMessage(JSON.stringify({ method: "setMuted", value: m }), "*");
+      win.postMessage(JSON.stringify({ method: "setVolume", value: m ? 0 : 1 }), "*");
+      win.postMessage(JSON.stringify({ method: "play" }), "*");
+    }
+  }, [source.kind]);
 
   useEffect(() => {
+    mutedRef.current = muted;
     const v = videoRef.current;
     if (v) {
       v.muted = muted;
-      const p = v.play();
-      if (p) p.catch(() => {
-        /* browser refused sound without a tap: fall back to muted */
-        v.muted = true;
-        void v.play().catch(() => {});
+      void v.play().catch(() => {
+        if (!v.muted) {
+          /* Browser refused sound before any click/tap: keep playing muted for now. */
+          v.muted = true;
+          onAutoMuted();
+          void v.play().catch(() => {});
+        }
       });
       return;
     }
-    const win = frameRef.current?.contentWindow;
-    if (!win) return;
-    if (source.kind === "youtube") {
-      win.postMessage(JSON.stringify({ event: "command", func: muted ? "mute" : "unMute", args: [] }), "*");
-      if (!muted) win.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [100] }), "*");
-    } else if (source.kind === "vimeo") {
-      win.postMessage(JSON.stringify({ method: "setVolume", value: muted ? 0 : 1 }), "*");
-      win.postMessage(JSON.stringify({ method: "setMuted", value: muted }), "*");
-    }
-  }, [muted, source]);
+    syncEmbedSound();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted, syncEmbedSound]);
+
+  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
+
+  /* Embeds start muted (always allowed to autoplay), then switch the sound on once the
+     player is ready; a few retries because players load at different speeds. */
+  const onFrameLoad = () => {
+    timers.current.forEach((t) => window.clearTimeout(t));
+    timers.current = [250, 800, 1600, 3000].map((ms) => window.setTimeout(syncEmbedSound, ms));
+  };
 
   if (source.kind === "file") {
     return (
@@ -339,7 +380,8 @@ function ReelMedia({
     );
   }
 
-  const src = embedSrc(source, { muted: initialMuted, controls });
+  const startMuted = source.kind === "youtube" || source.kind === "vimeo";
+  const src = embedSrc(source, { muted: startMuted, controls });
   return (
     <>
       {poster ? (
@@ -349,6 +391,7 @@ function ReelMedia({
       <iframe
         ref={frameRef}
         src={src ?? undefined}
+        onLoad={onFrameLoad}
         title="Video player"
         allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
         allowFullScreen
