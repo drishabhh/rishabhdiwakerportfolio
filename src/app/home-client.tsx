@@ -813,7 +813,6 @@ export default function HomeClient({ content }: HomeClientProps) {
                 <HeroPromptCta
                   prompts={content.hero.aiCta?.prompts ?? []}
                   tools={content.hero.aiCta?.tools ?? []}
-                  visible={heroOverlayVisible}
                   hireLabel={content.hero.aiCta?.hireLabel || "Hire me"}
                   hireHref={content.hero.aiCta?.hireHref ?? ""}
                   onHireClick={(glide) => handleNavClick("contact", glide)}

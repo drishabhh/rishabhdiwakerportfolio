@@ -4,7 +4,7 @@ import { useReducedMotionSafe } from "@/hooks/use-reduced-motion-safe";
 import { motion, useSpring } from "framer-motion";
 import { HireMeButton, type HireGlide } from "@/components/hire-me-fx";
 import { Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const magnetSpring = { stiffness: 220, damping: 16, mass: 0.6 };
 const cinematicEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -20,7 +20,6 @@ export type HeroPromptCtaProps = {
   /** Lines that type themselves into the bar, one after another. */
   prompts: string[];
   tools: string[];
-  visible: boolean;
   /** Orange button text. */
   hireLabel?: string;
   /** Optional link for the button; empty means onHireClick (scroll to Contact). */
@@ -38,7 +37,6 @@ export type HeroPromptCtaProps = {
 export function HeroPromptCta({
   prompts,
   tools,
-  visible,
   hireLabel = "Hire me",
   hireHref = "",
   onHireClick,
@@ -46,21 +44,40 @@ export function HeroPromptCta({
 }: HeroPromptCtaProps) {
   const reduced = useReducedMotionSafe();
   const list = prompts.map((p) => p.trim()).filter(Boolean);
-  const [text, setText] = useState(list[0] ?? "");
   const pullX = useSpring(0, magnetSpring);
   const pullY = useSpring(0, magnetSpring);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
 
+  /*
+   * Typewriter. Writes straight into the text node (no React re-render per letter), keeps its
+   * place when you scroll away and back, and simply waits while the bar is off screen or the
+   * tab is hidden, so scrolling back up never restarts or stutters it.
+   */
   useEffect(() => {
-    if (list.length === 0 || !visible) return;
-    let cancelled = false;
+    const el = textRef.current;
+    if (!el || list.length === 0) return;
     let timer = 0;
     let index = 0;
     let chars = list[0].length;
     let phase: "hold" | "delete" | "type" = "hold";
+    let onScreen = true;
+
+    const io = new IntersectionObserver(([entry]) => {
+      onScreen = Boolean(entry?.isIntersecting);
+    });
+    if (rootRef.current) io.observe(rootRef.current);
+
+    const show = (value: string) => {
+      if (el.textContent !== value) el.textContent = value;
+    };
 
     const step = () => {
-      if (cancelled) return;
-      const current = list[index];
+      if (!onScreen || document.hidden) {
+        timer = window.setTimeout(step, 250);
+        return;
+      }
+      const current = list[index]!;
       if (phase === "hold") {
         phase = "delete";
         timer = window.setTimeout(step, HOLD_MS);
@@ -68,7 +85,7 @@ export function HeroPromptCta({
       }
       if (phase === "delete") {
         chars -= 1;
-        setText(current.slice(0, Math.max(0, chars)));
+        show(current.slice(0, Math.max(0, chars)));
         if (chars <= 0) {
           index = (index + 1) % list.length;
           phase = "type";
@@ -78,22 +95,22 @@ export function HeroPromptCta({
         timer = window.setTimeout(step, DELETE_MS);
         return;
       }
-      const next = list[index];
       chars += 1;
-      setText(next.slice(0, chars));
-      if (chars >= next.length) phase = "hold";
-      const ch = next[chars - 1];
+      show(current.slice(0, chars));
+      if (chars >= current.length) phase = "hold";
+      const ch = current[chars - 1];
       const pause = ch === " " || ch === "," ? 40 : 0;
       timer = window.setTimeout(step, TYPE_MIN_MS + Math.random() * TYPE_JITTER_MS + pause);
     };
 
+    show(list[0]!);
     timer = window.setTimeout(step, START_MS);
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
+      io.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, list.join("\u0000")]);
+  }, [list.join("\u0000")]);
 
   const label = hireLabel.trim() || "Hire me";
   const buttonClass =
@@ -101,15 +118,10 @@ export function HeroPromptCta({
 
   return (
     <motion.div
-      initial={false}
-      animate={
-        reduced
-          ? { opacity: visible ? 1 : 0 }
-          : visible
-            ? { opacity: 1, filter: "blur(0px)", y: 0 }
-            : { opacity: 0, filter: "blur(6px)", y: 8 }
-      }
-      transition={reduced ? { duration: 0.25 } : { duration: 0.6, delay: visible ? 0.7 : 0, ease: cinematicEase }}
+      ref={rootRef}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={reduced ? { duration: 0.25 } : { duration: 0.6, delay: 0.7, ease: cinematicEase }}
       className="pointer-events-auto mx-auto flex w-full max-w-[min(92vw,560px)] flex-col items-stretch gap-2.5 md:gap-3 lg:max-w-[min(50vw,560px)]"
     >
       <motion.div
@@ -136,7 +148,9 @@ export function HeroPromptCta({
           <span className="text-white/45" aria-hidden>
             &gt;{" "}
           </span>
-          <span aria-hidden>{list.length ? text : ""}</span>
+          <span ref={textRef} aria-hidden>
+            {list[0] ?? ""}
+          </span>
           <span className="hero-prompt-caret ml-0.5 inline-block h-[1em] w-[0.5em] translate-y-[2px] bg-white/85" aria-hidden />
         </span>
         <HireMeButton label={label} href={hireHref} onHire={onHireClick} className={buttonClass} />
